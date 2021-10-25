@@ -1,17 +1,34 @@
-#include <stdio.h>
-#include <unistd.h>
+#include <stdio.h>     /* for printf */
+#include <stdlib.h>    /* for exit */
+#include <limits.h>    /* LONG_MIN et al */
+#include <string.h>    /* memset */
+#include <errno.h>
+#include <getopt.h>
 
-#include "args.h"
+#include "./include/args.h"
+#include "../utils/include/netutils.h"
 
-static void
-version(void) {
+static unsigned short port(const char *s) {
+     char *end     = 0;
+     const long sl = strtol(s, &end, 10);
+
+     if (end == s|| '\0' != *end
+        || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
+        || sl < 0 || sl > USHRT_MAX) {
+         fprintf(stderr, "port should in in the range of 1-65536: %s\n", s);
+         exit(1);
+         return 1;
+     }
+     return (unsigned short)sl;
+}
+
+static void version(void) {
     fprintf(stderr, "pop3filter version 0.0\n"
                     "ITBA Protocolos de Comunicacion 2020/1 -- Grupo X\n"
                     "AQUI VA LA LICENCIA\n");
 }
 
-static void
-usage(const char *progname) {
+static void usage(const char *progname) {
     fprintf(stderr,
         "Usage: %s [OPTION]...\n"
         "\n"
@@ -24,15 +41,12 @@ usage(const char *progname) {
     exit(1);
 }
 
-void 
-parseArgs(const int argc, char **argv, struct proxyArgs *args) {
-    memset(args, 0, sizeof(*args)); // sobre todo para setear en null los punteros de users
-
+void parseArgs(const int argc, const char **argv, struct proxyArgs *args, addressInfo * address) {
+    address->port = 1080;
     int optionArg;
 
     while (true) {
-
-        optionArg = getopt(argc, argv, "");
+        optionArg = getopt(argc, (char * const*) argv, "hl:p:v");
 
         if (optionArg == -1)
             break;
@@ -45,7 +59,7 @@ parseArgs(const int argc, char **argv, struct proxyArgs *args) {
                 args->proxyAddr = optarg;
                 break;
             case 'p':
-                args->proxyPort = port(optarg);
+                address->port = port(optarg);
                 break;
             case 'v':
                 version();
@@ -55,7 +69,6 @@ parseArgs(const int argc, char **argv, struct proxyArgs *args) {
                 fprintf(stderr, "unknown argument %d.\n", optionArg);
                 exit(1);
         }
-
     }
     if (optind < argc) {
         fprintf(stderr, "argument not accepted: ");

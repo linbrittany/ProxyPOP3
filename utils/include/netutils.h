@@ -9,10 +9,19 @@ typedef enum addressType {
     ADDR_DOMAIN = 0x03,
 } addressType;
 
+typedef union address {
+    struct sockaddr_storage storage;
+    char fqdn[0xFF];
+} address;
+
 typedef struct addressInfo {
     addressType type;
     in_port_t port;
     int domain;
+    address addr;
+    socklen_t addrLenght;
 } addressInfo;
+
+void setAddress(addressInfo * address, const char * ip);
 
 #endif

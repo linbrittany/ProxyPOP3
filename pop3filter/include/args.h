@@ -2,10 +2,10 @@
 #define ARGS_H
 
 #include <stdbool.h>
+#include "../../utils/include/netutils.h"
 
 struct proxyArgs {
-    char           *proxyAddr;
-    unsigned short  proxyPort;
+    char *proxyAddr;
 };
 
 /**
@@ -14,6 +14,6 @@ struct proxyArgs {
  * la ejecucion.
  */
 void 
-parseArgs(const int argc, char **argv, struct proxyArgs *args);
+parseArgs(const int argc, const char **argv, struct proxyArgs *args, addressInfo * address);
 
 #endif
