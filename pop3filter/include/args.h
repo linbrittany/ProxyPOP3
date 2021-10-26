@@ -4,8 +4,11 @@
 #include <stdbool.h>
 #include "../../utils/include/netutils.h"
 
-struct proxyArgs {
-    char *proxyAddr;
+struct proxyArgs
+{
+    char *stderr_file_path;
+    char *listen_pop3_admin_address;
+    char *proxy_addr;
 };
 
 /**
@@ -13,7 +16,6 @@ struct proxyArgs {
  * args con defaults o la seleccion humana. Puede cortar
  * la ejecucion.
  */
-void 
-parse_args(const int argc, const char **argv, struct proxyArgs *args, addressInfo * address);
+void parse_args(const int argc, const char **argv, struct proxyArgs *args, addressInfo *address);
 
 #endif
