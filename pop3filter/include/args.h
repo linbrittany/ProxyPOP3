@@ -14,6 +14,6 @@ struct proxyArgs {
  * la ejecucion.
  */
 void 
-parseArgs(const int argc, const char **argv, struct proxyArgs *args, addressInfo * address);
+parse_args(const int argc, const char **argv, struct proxyArgs *args, addressInfo * address);
 
 #endif

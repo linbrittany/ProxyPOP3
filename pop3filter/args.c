@@ -41,7 +41,7 @@ static void usage(const char *progname) {
     exit(1);
 }
 
-void parseArgs(const int argc, const char **argv, struct proxyArgs *args, addressInfo * address) {
+void parse_args(const int argc, const char **argv, struct proxyArgs *args, addressInfo * address) {
     address->port = 1080;
     int optionArg;
 
