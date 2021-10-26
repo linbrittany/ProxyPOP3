@@ -46,20 +46,28 @@ void parseArgs(const int argc, const char **argv, struct proxyArgs *args, addres
     int optionArg;
 
     while (true) {
-        optionArg = getopt(argc, (char * const*) argv, "hl:p:v");
+        optionArg = getopt(argc, (char * const*) argv, "e:hl:L:o:p:P:t:v");
 
         if (optionArg == -1)
             break;
 
         switch (optionArg) {
+            case 'e':
+                break;
             case 'h':
                 usage(argv[0]);
                 break;
             case 'l':
                 args->proxyAddr = optarg;
                 break;
+            case 'L':
+                break;
             case 'p':
                 address->port = port(optarg);
+                break;
+            case 'P':
+                break;
+            case 't':
                 break;
             case 'v':
                 version();
