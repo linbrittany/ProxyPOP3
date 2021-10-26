@@ -19,7 +19,8 @@ typedef struct addressInfo {
     in_port_t port;
     int domain;
     address addr;
-    socklen_t addrLenght;
+    struct in_addr addr2;
+    socklen_t addrLength;
 } addressInfo;
 
 void setAddress(addressInfo * address, const char * ip);
