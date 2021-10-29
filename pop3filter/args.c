@@ -8,8 +8,7 @@
 #include "./include/args.h"
 #include "../utils/include/netutils.h"
 
-static unsigned short port(const char *s)
-{
+static unsigned short port(const char *s) {
     char *end = 0;
     const long sl = strtol(s, &end, 10);
 
@@ -17,20 +16,17 @@ static unsigned short port(const char *s)
     {
         fprintf(stderr, "port should in in the range of 1-65536: %s\n", s);
         exit(1);
-        return 1;
     }
     return (unsigned short)sl;
 }
 
-static void version(void)
-{
+static void version(void) {
     fprintf(stderr, "pop3filter version 0.0\n"
                     "ITBA Protocolos de Comunicacion 2020/1 -- Grupo X\n"
                     "AQUI VA LA LICENCIA\n");
 }
 
-static void usage(const char *progname)
-{
+static void usage(const char *progname) {
     fprintf(stderr,
             "Usage: %s [OPTION]...\n"
             "\n"
@@ -48,20 +44,19 @@ static void usage(const char *progname)
     exit(1);
 }
 
-void parse_args(const int argc, const char **argv, struct proxyArgs *args, addressInfo *address)
-{
+void parse_args(const int argc, const char **argv, struct proxy_args *args, address_info *address) {
 
     address->port = 1080;
 
-    int optionArg;
+    int option_arg;
     while (true)
     {
-        optionArg = getopt(argc, (char *const *)argv, "e:hl:L:o:p:P:t:v");
+        option_arg = getopt(argc, (char *const *)argv, "e:hl:L:o:p:P:t:v");
 
-        if (optionArg == -1)
+        if (option_arg == -1)
             break;
 
-        switch (optionArg)
+        switch (option_arg)
         {
         case 'e':
             args->stderr_file_path = optarg;
@@ -70,7 +65,7 @@ void parse_args(const int argc, const char **argv, struct proxyArgs *args, addre
             usage(argv[0]);
             break;
         case 'l':
-            args->proxy_addr = optarg;
+            args->listen_pop3_address = optarg;
             break;
         case 'L':
             args->listen_pop3_admin_address = optarg;
@@ -87,9 +82,8 @@ void parse_args(const int argc, const char **argv, struct proxyArgs *args, addre
         case 'v':
             version();
             exit(0);
-            break;
         default:
-            fprintf(stderr, "unknown argument %d.\n", optionArg);
+            fprintf(stderr, "unknown argument %d.\n", option_arg);
             exit(1);
         }
     }

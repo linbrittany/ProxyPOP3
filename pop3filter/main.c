@@ -4,57 +4,72 @@
 #include <limits.h>
 #include <errno.h>
 #include <signal.h>
+#include <unistd.h>
 
 #include "./include/args.h"
 #include "../utils/include/netutils.h"
 #include "./include/selector.h"
+#include "./include/pop3nio.h"
 
 #define BACKLOG 250
 
-static struct proxyArgs args;
-static addressInfo proxyAddress;
+static struct proxy_args args;
+static address_info proxy_address;
+static address_info admin_proxy_address;
 
 static int proxy = -1;
+static int admin_proxy = -1;
 
 static bool done = false;
 
-static void sigterm_handler(const int signal)
-{
+static void sigterm_handler(const int signal) {
     printf("signal %d, cleaning up and exiting\n", signal);
     done = true;
 }
 
-static void setUpProxyArgs(void)
-{
-    args.proxy_addr = "0.0.0.0";
+static void set_up_proxy_args(void) {
+    args.listen_pop3_address = "0.0.0.0";
     args.listen_pop3_admin_address = "127.0.0.1";
     args.stderr_file_path = "/dev/null";
 }
 
-int main(int argc, char const **argv)
-{
+int main(int argc, char const **argv) {
     memset(&args, 0, sizeof(args));
-    setUpProxyArgs();
-    parseArgs(argc, argv, &args, &proxyAddress);
+    set_up_proxy_args();
+    parse_args(argc, argv, &args, &proxy_address);
 
-    setAddress(&proxyAddress, args.proxy_addr);
+    set_address(&proxy_address, args.listen_pop3_address);
+    set_address(&admin_proxy_address, args.listen_pop3_admin_address);
 
     const char *err_msg = NULL;
     selector_status ss = SELECTOR_SUCCESS;
     fd_selector selector = NULL;
 
-    if ((proxy = socket(proxyAddress.domain, SOCK_STREAM, IPPROTO_TCP)) < 0)
+    if ((proxy = socket(proxy_address.domain, SOCK_STREAM, IPPROTO_TCP)) < 0)
     {
         printf("Unable to create socket for proxy");
         exit(1);
     }
 
-    int ans = bind(proxy, (struct sockaddr *)&proxyAddress.addr.storage, sizeof(proxyAddress.addr.storage));
+    if ((admin_proxy = socket(proxy_address.domain, SOCK_STREAM, IPPROTO_TCP)) < 0)
+    {
+        printf("Unable to create socket for proxy admin");
+        exit(1);
+    }
 
-    if (ans < 0)
+    int ans = -1;
+
+    if ((ans = bind(proxy, (struct sockaddr *)&admin_proxy_address.addr.storage, sizeof(admin_proxy_address.addr.storage))) < 0)
     {
         err_msg = "bind() failed for proxy";
         close(proxy);
+        exit(1);
+    }
+
+    if ((ans = bind(admin_proxy, (struct sockaddr *)&admin_proxy_address.addr.storage, sizeof(admin_proxy_address.addr.storage))) < 0)
+    {
+        err_msg = "bind() failed for proxy admin";
+        close(admin_proxy);
         exit(1);
     }
 
@@ -62,6 +77,13 @@ int main(int argc, char const **argv)
     {
         err_msg = "listen() failed for proxy";
         close(proxy);
+        exit(1);
+    }
+
+    if ((ans = listen(admin_proxy, BACKLOG)) < 0)
+    {
+        err_msg = "listen() failed for proxy admin";
+        close(admin_proxy);
         exit(1);
     }
 
@@ -73,13 +95,13 @@ int main(int argc, char const **argv)
         err_msg = "getting server proxy flags";
         goto finally;
     }
-    const struct selector_init conf = {
-        .signal = SIGALRM,
-        .select_timeout = {
-            .tv_sec = 10,
-            .tv_nsec = 0,
-        },
-    };
+//    const struct selector_init conf = {
+//        .signal = SIGALRM,
+//        .select_timeout = {
+//            .tv_sec = 10,
+//            .tv_nsec = 0,
+//        },
+//    };
 
     selector = selector_new(1024);
     if (selector == NULL)
@@ -88,18 +110,29 @@ int main(int argc, char const **argv)
         goto finally;
     }
     const struct fd_handler pop3 = {
+        .handle_read = pop3_passive_accept,
+        .handle_write = NULL,
+        .handle_close = NULL, // nada que liberar
+    };
+
+    const struct fd_handler pop3_admin = {
         .handle_read = NULL,
         .handle_write = NULL,
         .handle_close = NULL, // nada que liberar
     };
 
-    ss = selector_register(selector, proxy, &pop3, OP_READ, NULL);
-
-    if (ss != SELECTOR_SUCCESS)
+    if ((ss = selector_register(selector, proxy, &pop3, OP_READ, NULL)) != SELECTOR_SUCCESS)
     {
-        err_msg = "registering fd";
+        err_msg = "registering fd for proxy";
         goto finally;
     }
+
+    if ((ss = selector_register(selector, admin_proxy, &pop3_admin, OP_READ, NULL)) != SELECTOR_SUCCESS)
+    {
+        err_msg = "registering fd for proxy admin";
+        goto finally;
+    }
+
     for (; !done;)
     {
         err_msg = NULL;
@@ -134,7 +167,7 @@ finally:
     }
     selector_close();
 
-    socksv5_pool_destroy();
+//    socksv5_pool_destroy();
 
     if (proxy >= 0)
     {

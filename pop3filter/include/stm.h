@@ -47,9 +47,9 @@ struct state_definition {
     unsigned state;
 
     /** ejecutado al arribar al estado */
-    void     (*on_arrival)    (const unsigned state, struct selector_key *key);
+    void (*on_arrival) (const unsigned state, struct selector_key *key);
     /** ejecutado al salir del estado */
-    void     (*on_departure)  (const unsigned state, struct selector_key *key);
+    void (*on_departure) (const unsigned state, struct selector_key *key);
     /** ejecutado cuando hay datos disponibles para ser leidos */
     unsigned (*on_read_ready) (struct selector_key *key);
     /** ejecutado cuando hay datos disponibles para ser escritos */
@@ -60,27 +60,21 @@ struct state_definition {
 
 
 /** inicializa el la máquina */
-void
-stm_init(struct state_machine *stm);
+void stm_init(struct state_machine *stm);
 
 /** obtiene el identificador del estado actual */
-unsigned
-stm_state        (struct state_machine *stm);
+unsigned stm_state (struct state_machine *stm);
 
 /** indica que ocurrió el evento read. retorna nuevo id de nuevo estado. */
-unsigned
-stm_handler_read(struct state_machine *stm, struct selector_key *key);
+unsigned stm_handler_read (struct state_machine *stm, struct selector_key *key);
 
 /** indica que ocurrió el evento write. retorna nuevo id de nuevo estado. */
-unsigned
-stm_handler_write(struct state_machine *stm, struct selector_key *key);
+unsigned stm_handler_write (struct state_machine *stm, struct selector_key *key);
 
 /** indica que ocurrió el evento block. retorna nuevo id de nuevo estado. */
-unsigned
-stm_handler_block(struct state_machine *stm, struct selector_key *key);
+unsigned stm_handler_block (struct state_machine *stm, struct selector_key *key);
 
 /** indica que ocurrió el evento close. retorna nuevo id de nuevo estado. */
-void
-stm_handler_close(struct state_machine *stm, struct selector_key *key);
+void stm_handler_close (struct state_machine *stm, struct selector_key *key);
 
 #endif

@@ -74,20 +74,16 @@ struct selector_init {
 };
 
 /** inicializa la librería */
-selector_status
-selector_init(const struct selector_init *c);
+selector_status selector_init(const struct selector_init *c);
 
 /** deshace la incialización de la librería */
-selector_status
-selector_close(void);
+selector_status selector_close(void);
 
 /* instancia un nuevo selector. returna NULL si no puede instanciar  */
-fd_selector
-selector_new(const size_t initial_elements);
+fd_selector selector_new(const size_t initial_elements);
 
 /** destruye un selector creado por _new. Tolera NULLs */
-void
-selector_destroy(fd_selector s);
+void selector_destroy(fd_selector s);
 
 /**
  * Intereses sobre un file descriptor (quiero leer, quiero escribir, …)
@@ -147,8 +143,7 @@ typedef struct fd_handler {
  *
  * @return 0 si fue exitoso el registro.
  */
-selector_status
-selector_register(fd_selector        s,
+selector_status selector_register(fd_selector        s,
                   const int          fd,
                   const fd_handler  *handler,
                   const fd_interest  interest,
@@ -157,37 +152,29 @@ selector_register(fd_selector        s,
 /**
  * desregistra un file descriptor del selector
  */
-selector_status
-selector_unregister_fd(fd_selector   s,
+selector_status selector_unregister_fd(fd_selector   s,
                        const int     fd);
 
 /** permite cambiar los intereses para un file descriptor */
-selector_status
-selector_set_interest(fd_selector s, int fd, fd_interest i);
+selector_status selector_set_interest(fd_selector s, int fd, fd_interest i);
 
 /** permite cambiar los intereses para un file descriptor */
-selector_status
-selector_set_interest_key(struct selector_key *key, fd_interest i);
-
+selector_status selector_set_interest_key(struct selector_key *key, fd_interest i);
 
 /**
  * se bloquea hasta que hay eventos disponible y los despacha.
  * Retorna luego de cada iteración, o al llegar al timeout.
  */
-selector_status
-selector_select(fd_selector s);
+selector_status selector_select(fd_selector s);
 
 /**
  * Método de utilidad que activa O_NONBLOCK en un fd.
  *
  * retorna -1 ante error, y deja detalles en errno.
  */
-int
-selector_fd_set_nio(const int fd);
+int selector_fd_set_nio(const int fd);
 
 /** notifica que un trabajo bloqueante terminó */
-selector_status
-selector_notify_block(fd_selector s,
-                 const int   fd);
+selector_status selector_notify_block(fd_selector s, const int fd);
 
 #endif

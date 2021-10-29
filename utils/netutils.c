@@ -4,34 +4,34 @@
 #include <netinet/in.h>
 #include <string.h>
 
-#include "./include/netutils.h"
+#include "include/netutils.h"
 
-void setAddress(addressInfo * address, const char * ip) {
+void set_address(address_info * address, const char * ip) {
     memset(&(address->addr.storage), 0, sizeof(address->addr.storage));
     address->type = ADDR_IPV4;
     address->domain = AF_INET;
-    address->addrLength = sizeof(struct sockaddr_in);
-    struct sockaddr_in originIpv4;
-    memset(&(originIpv4), 0, sizeof(originIpv4));
-    originIpv4.sin_family = AF_INET;
+    address->addr_length = sizeof(struct sockaddr_in);
+    struct sockaddr_in origin_ip4;
+    memset(&(origin_ip4), 0, sizeof(origin_ip4));
+    origin_ip4.sin_family = AF_INET;
     int ans = 0;
-    if ((ans = inet_pton(AF_INET, ip, &originIpv4.sin_addr.s_addr)) <= 0) {
+    if ((ans = inet_pton(AF_INET, ip, &origin_ip4.sin_addr.s_addr)) <= 0) {
         address->type = ADDR_IPV6;
         address->domain = AF_INET6;
-        address->addrLength = sizeof(struct sockaddr_in6);
-        struct sockaddr_in6 originIpv6;
-        memset(&(originIpv6), 0, sizeof(originIpv6));
-        originIpv6.sin6_family = AF_INET6;
-        if ((ans = inet_pton(AF_INET6, ip, &originIpv6.sin6_addr.s6_addr)) <= 0) {
+        address->addr_length = sizeof(struct sockaddr_in6);
+        struct sockaddr_in6 origin_ip6;
+        memset(&(origin_ip6), 0, sizeof(origin_ip6));
+        origin_ip6.sin6_family = AF_INET6;
+        if ((ans = inet_pton(AF_INET6, ip, &origin_ip6.sin6_addr.s6_addr)) <= 0) {
             address->type = ADDR_DOMAIN;
             memcpy(address->addr.fqdn, ip, strlen(ip));
             return;
         }
-        originIpv6.sin6_port = htons(address->port);
-        memcpy(&address->addr.storage, &originIpv6, sizeof(address->addrLength));
+        origin_ip6.sin6_port = htons(address->port);
+        memcpy(&address->addr.storage, &origin_ip6, sizeof(address->addr_length));
         return;
     }
-    originIpv4.sin_port = htons(address->port);
-    memcpy(&address->addr.storage, &originIpv4, sizeof(address->addrLength));
+    origin_ip4.sin_port = htons(address->port);
+    memcpy(&address->addr.storage, &origin_ip4, sizeof(address->addr_length));
     return;
 }
