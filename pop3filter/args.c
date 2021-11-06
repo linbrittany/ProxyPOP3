@@ -44,9 +44,9 @@ static void usage(const char *progname) {
     exit(1);
 }
 
-void parse_args(const int argc, const char **argv, struct proxy_args *args, address_info *address) {
+void parse_args(const int argc, const char **argv, struct proxy_args *args) {
 
-    address->port = 1080;
+    args->admin_port = 1080;
 
     int option_arg;
     while (true)
@@ -73,7 +73,7 @@ void parse_args(const int argc, const char **argv, struct proxy_args *args, addr
         case 'o':
             break;
         case 'p':
-            address->port = port(optarg);
+            args->admin_port = port(optarg);
             break;
         case 'P':
             break;

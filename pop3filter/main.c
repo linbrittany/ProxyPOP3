@@ -14,11 +14,10 @@
 #define BACKLOG 250
 
 static struct proxy_args args;
-static address_info proxy_address;
-static address_info admin_proxy_address;
 
-static int proxy = -1;
-static int admin_proxy = -1;
+
+//static int proxy = -1;
+//static int admin_proxy = -1;
 
 static bool done = false;
 
@@ -36,61 +35,43 @@ static void set_up_proxy_args(void) {
 int main(int argc, char const **argv) {
     memset(&args, 0, sizeof(args));
     set_up_proxy_args();
-    parse_args(argc, argv, &args, &proxy_address);
+    parse_args(argc, argv, &args);
 
-    set_address(&proxy_address, args.listen_pop3_address);
-    set_address(&admin_proxy_address, args.listen_pop3_admin_address);
+    int socketC = set_address((&args)->admin_port,args.listen_pop3_address);
+    int socketO = set_address((&args)->admin_port,args.listen_pop3_admin_address);
+
+    printf("%d",socketC);
+   
+
+    (&args)->socketC = socketC;
+
+    (&args)->socketO= socketO;
 
     const char *err_msg = NULL;
     selector_status ss = SELECTOR_SUCCESS;
     fd_selector selector = NULL;
 
-    if ((proxy = socket(proxy_address.domain, SOCK_STREAM, IPPROTO_TCP)) < 0)
-    {
-        printf("Unable to create socket for proxy");
-        exit(1);
-    }
+   int ans;
 
-    if ((admin_proxy = socket(proxy_address.domain, SOCK_STREAM, IPPROTO_TCP)) < 0)
-    {
-        printf("Unable to create socket for proxy admin");
-        exit(1);
-    }
 
-    int ans = -1;
-
-    if ((ans = bind(proxy, (struct sockaddr *)&admin_proxy_address.addr.storage, sizeof(admin_proxy_address.addr.storage))) < 0)
-    {
-        err_msg = "bind() failed for proxy";
-        close(proxy);
-        exit(1);
-    }
-
-    if ((ans = bind(admin_proxy, (struct sockaddr *)&admin_proxy_address.addr.storage, sizeof(admin_proxy_address.addr.storage))) < 0)
-    {
-        err_msg = "bind() failed for proxy admin";
-        close(admin_proxy);
-        exit(1);
-    }
-
-    if ((ans = listen(proxy, BACKLOG)) < 0)
+    if ((ans = listen(socketC, BACKLOG)) < 0)
     {
         err_msg = "listen() failed for proxy";
-        close(proxy);
+        close(socketC);
         exit(1);
     }
 
-    if ((ans = listen(admin_proxy, BACKLOG)) < 0)
+    if ((ans = listen(socketO, BACKLOG)) < 0)
     {
         err_msg = "listen() failed for proxy admin";
-        close(admin_proxy);
+        close(socketO);
         exit(1);
     }
 
     signal(SIGTERM, sigterm_handler);
     signal(SIGINT, sigterm_handler);
 
-    if (selector_fd_set_nio(proxy) == -1)
+    if (selector_fd_set_nio(socketC) == -1)
     {
         err_msg = "getting server proxy flags";
         goto finally;
@@ -121,13 +102,13 @@ int main(int argc, char const **argv) {
         .handle_close = NULL, // nada que liberar
     };
 
-    if ((ss = selector_register(selector, proxy, &pop3, OP_READ, NULL)) != SELECTOR_SUCCESS)
+    if ((ss = selector_register(selector, socketC, &pop3, OP_READ, NULL)) != SELECTOR_SUCCESS)
     {
         err_msg = "registering fd for proxy";
         goto finally;
     }
 
-    if ((ss = selector_register(selector, admin_proxy, &pop3_admin, OP_READ, NULL)) != SELECTOR_SUCCESS)
+    if ((ss = selector_register(selector, socketO, &pop3_admin, OP_READ, NULL)) != SELECTOR_SUCCESS)
     {
         err_msg = "registering fd for proxy admin";
         goto finally;
@@ -169,9 +150,10 @@ finally:
 
 //    socksv5_pool_destroy();
 
-    if (proxy >= 0)
+    if (socketC>= 0)
     {
-        close(proxy);
+        close(socketO);
     }
+
     return ret;
 }
