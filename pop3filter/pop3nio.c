@@ -125,9 +125,13 @@ static void pop3_destroy(struct pop3 *s) {
     }
 }
 
-static struct pop3 * pop3_new(int client_fd) {
-    struct pop3 * ret = NULL;
-    return ret;
+static struct pop3 * pop3_new(int client_fd, size_t buffer_size) {
+    struct pop3 * new_pop3 = malloc(sizeof(struct pop3));
+    memset(new_pop3, 0, sizeof(struct pop3));
+    new_pop3->client_fd = client_fd;
+    new_pop3->origin_fd = -1;
+
+    return new_pop3;
 }
 
 void pop3_passive_accept(struct selector_key *key) {
@@ -142,7 +146,7 @@ void pop3_passive_accept(struct selector_key *key) {
     if(selector_fd_set_nio(client) == -1) {
         goto fail;
     }
-    state = pop3_new(client);
+    state = pop3_new(client, args.buffer_size);
     if(state == NULL) {
         // sin un estado, nos es imposible manejaro.
         // tal vez deberiamos apagar accept() hasta que detectemos

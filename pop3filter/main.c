@@ -12,8 +12,9 @@
 #include "./include/pop3nio.h"
 
 #define BACKLOG 250
+#define BUFFER_SIZE 4000
 
-static struct proxy_args args;
+extern struct proxy_args args;
 
 static address_info proxy_addr;
 static address_info admin_proxy_addr;
@@ -35,6 +36,7 @@ static void set_up_proxy_args(void) {
     args.listen_pop3_address = "0.0.0.0";
     args.listen_pop3_admin_address = "127.0.0.1";
     args.stderr_file_path = "/dev/null";
+    args.buffer_size = BUFFER_SIZE;
 }
 
 static unsigned short port(const char *s) {
@@ -242,6 +244,7 @@ int main(int argc, char const **argv) {
         .handle_close = NULL, // nada que liberar
     };
 
+    //Agregar origin addr al selector register del proxy
     if ((ss = selector_register(selector, proxy, &pop3, OP_READ, NULL)) != SELECTOR_SUCCESS)
     {
         err_msg = "registering fd for proxy";
