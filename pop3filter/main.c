@@ -143,9 +143,6 @@ int main(int argc, char const **argv) {
 
     close(0); //Nada que leer de stdin
 
-    // (&args)->socketC = socketC;
-    // (&args)->socketO= socketO;
-
     const char *err_msg = NULL;
 
     if ((proxy = socket(proxy_addr.domain, SOCK_STREAM, IPPROTO_TCP)) < 0) {
@@ -200,6 +197,8 @@ int main(int argc, char const **argv) {
         close(admin_proxy);
         exit(1);
     }
+
+    printf("listening on tcp port: %d\n", proxy_addr.port);
 
     //Para terminar el programa correctamente
     signal(SIGTERM, sigterm_handler); //kill
