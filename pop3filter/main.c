@@ -41,7 +41,6 @@ int main(int argc, char const **argv) {
     int socketO = set_address((&args)->admin_port,args.listen_pop3_admin_address);
 
     printf("%d",socketC);
-   
 
     (&args)->socketC = socketC;
 
