@@ -65,7 +65,7 @@ selector_status selector_init(const struct selector_init  *c) {
     // principal. La técnica se encuentra descripta en
     // "The new pselect() system call" <https://lwn.net/Articles/176911/>
     //  March 24, 2006
-    selector_status   ret = SELECTOR_SUCCESS;
+    selector_status ret = SELECTOR_SUCCESS;
     struct sigaction act = {
         .sa_handler = wake_handler,
     };
@@ -73,7 +73,7 @@ selector_status selector_init(const struct selector_init  *c) {
     // 0. calculamos mascara para evitar que se interrumpa antes de llegar al
     //    select
     sigemptyset(&blockset);
-    sigaddset  (&blockset, conf.signal);
+    sigaddset(&blockset, conf.signal);
     if(-1 == sigprocmask(SIG_BLOCK, &blockset, NULL)) {
         ret = SELECTOR_IO;
         goto finally;
@@ -358,8 +358,7 @@ finally:
     return ret;
 }
 
-selector_status selector_unregister_fd(fd_selector       s,
-                       const int         fd) {
+selector_status selector_unregister_fd(fd_selector s, const int fd) {
     selector_status ret = SELECTOR_SUCCESS;
 
     if(NULL == s || INVALID_FD(fd)) {
@@ -518,8 +517,9 @@ selector_status selector_select(fd_selector s) {
 
     s->selector_thread = pthread_self();
 
-    int fds = pselect(s->max_fd + 1, &s->slave_r, &s->slave_w, 0, &s->slave_t,
-                      &emptyset);
+    //Llamar con slaves porque los va modificar
+    int fds = pselect(s->max_fd + 1, &s->slave_r, &s->slave_w, 0, &s->slave_t, &emptyset);
+    //Bloqueado por timeout que seteamos
     if(-1 == fds) {
         switch(errno) {
             case EAGAIN:

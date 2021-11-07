@@ -1,4 +1,4 @@
-all: pop3filter/args.c pop3filter/main.c utils/*.c
+all: pop3filter/*.c utils/*.c
 	gcc --std=c11 -pedantic  -pthread -pedantic-errors -Wall -Wextra -Werror -Wno-unused-parameter -Wno-implicit-fallthrough -D_POSIX_C_SOURCE=200112L pop3filter/*.c utils/*.c -g -o main
 
 clean:

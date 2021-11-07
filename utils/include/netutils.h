@@ -14,6 +14,13 @@ typedef union address {
     char fqdn[0xFF];
 } address;
 
+typedef struct address_info {
+    address_type type;
+    address addr;
+    socklen_t addr_len;
+    int domain;
+    in_port_t port;
+} address_info;
 
-int set_address( int port, const char * ip);
+void set_address(address_info * address, const char * ip);
 #endif

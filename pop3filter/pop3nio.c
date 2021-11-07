@@ -85,8 +85,8 @@ struct pop3 {
     //     struct copy copy;
     // } orig;
 
-    struct addrinfo *origin_resolution;
-    struct addrinfo *curr_origin_resolution;
+    struct addrinfo *origin_resolution; //No pisarlo porque hay que liberarlo
+    struct addrinfo *curr_origin_resolution; 
 
     unsigned references;
 
