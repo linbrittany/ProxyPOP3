@@ -172,9 +172,6 @@ int main(int argc, char const **argv) {
         exit(1);
     }
 
-    printf("FAILS HERE BINDS\n");
-
-
     if((ans = bind(proxy, (struct sockaddr *)&proxy_addr.addr.storage, proxy_addr.addr_len)) < 0) {
         err_msg = "bind() failed for proxy";
         close(proxy);
@@ -188,10 +185,6 @@ int main(int argc, char const **argv) {
         exit(1);
     }
 
-    printf("FAILS HERE LISTEN\n");
-
-
-    //FAIL HERE
     if ((ans = listen(proxy, BACKLOG)) < 0) {
         err_msg = "listen() failed for proxy";
         printf("%s %d\n",err_msg,errno);
