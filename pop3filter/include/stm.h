@@ -24,9 +24,7 @@
 struct state_machine {
     /** declaración de cual es el estado inicial */
     unsigned                      initial;
-    /**
-     * declaracion de los estados: deben estar ordenados segun .[].state.
-     */
+    /** declaracion de los estados: deben estar ordenados segun .[].state. */
     const struct state_definition *states;
     /** cantidad de estados */
     unsigned                      max_state;

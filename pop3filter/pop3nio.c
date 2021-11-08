@@ -12,36 +12,18 @@
 #include "selector.h"
 #include "stm.h"
 #include "pop3nio.h"
+#include "buffer.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
 /** maquina de estados general */
 enum pop3state {
-    /**
-     * recibe el mensaje `hello` del cliente, y lo procesa
-     *
-     * Intereses:
-     *     - OP_READ sobre client_fd
-     *
-     * Transiciones:
-     *   - HELLO_READ  mientras el mensaje no esta completo
-     *   - HELLO_WRITE cuando esta completo
-     *   - ERROR       ante cualquier error (IO/parseo)
-     */
-    HELLO_READ,
-
-    /**
-     * envÃ­a la respuesta del `hello' al cliente.
-     *
-     * Intereses:
-     *     - OP_WRITE sobre client_fd
-     *
-     * Transiciones:
-     *   - HELLO_WRITE  mientras queden bytes por enviar
-     *   - REQUEST_READ cuando se enviaron todos los bytes
-     *   - ERROR        ante cualquier error (IO/parseo)
-     */
-    HELLO_WRITE,
+    RESOLVING,
+    CONNECTING,
+    HELLO,
+    CHECK_CAPABILITIES,
+    COPY,
+    SEND_ERROR_MSG,
 
     // estados terminales
     DONE,
@@ -66,12 +48,33 @@ static const struct fd_handler pop3_handler = {
     .handle_block  = pop3_block,
 };
 
+//Funciones para los distintos estados del cliente
+static const struct state_definition client_state_def[] = {
+    {
+        .state = RESOLVING,
+        .on_block_ready = NULL, 
+    }, {
+        .state = CONNECTING,
+    }, {
+        .state = HELLO,
+    }, {
+        .state = CHECK_CAPABILITIES,
+    }, {
+        .state = COPY,
+    }, {
+        .state = SEND_ERROR_MSG,
+    }
+};
+
 struct pop3 {
     int client_fd;
     int origin_fd;
 
     /** maquinas de estados */
     struct state_machine stm;
+
+    struct buffer * read_buffer;
+    struct buffer * write_buffer;
 
     // /** estados para el client_fd */
     // union {
@@ -130,7 +133,12 @@ static struct pop3 * pop3_new(int client_fd, size_t buffer_size) {
     memset(new_pop3, 0, sizeof(struct pop3));
     new_pop3->client_fd = client_fd;
     new_pop3->origin_fd = -1;
+    new_pop3->read_buffer = buffer_init(buffer_size);
 
+    new_pop3->stm.initial = RESOLVING;
+    new_pop3->stm.max_state = ERROR;
+    new_pop3->stm.states = client_state_def;
+    stm_init(&new_pop3->stm);
     return new_pop3;
 }
 
@@ -219,3 +227,4 @@ static void pop3_done(struct selector_key *key) {
         }
     }
 }
+

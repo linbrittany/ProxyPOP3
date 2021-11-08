@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <assert.h>
+#include <stdlib.h>
 
 #include "buffer.h"
 
@@ -13,10 +14,12 @@ inline void buffer_reset(buffer *b) {
     b->write = b->data;
 }
 
-void buffer_init(buffer *b, const size_t n, uint8_t *data) {
-    b->data = data;
-    buffer_reset(b);
-    b->limit = b->data + n;
+struct buffer * buffer_init(const size_t n) {
+    struct buffer * new_buffer = malloc(sizeof(struct buffer));
+    new_buffer->data = malloc(n * sizeof(uint8_t));
+    new_buffer->limit = new_buffer->data + n;
+    buffer_reset(new_buffer);
+    return new_buffer;
 }
 
 inline bool buffer_can_write(buffer *b) {

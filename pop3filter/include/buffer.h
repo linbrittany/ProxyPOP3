@@ -98,8 +98,7 @@ struct buffer {
 /**
  * inicializa el buffer sin utilizar el heap
  */
-void
-buffer_init(buffer *b, const size_t n, uint8_t *data);
+struct buffer * buffer_init(const size_t n);
 
 /**
  * Retorna un puntero donde se pueden escribir hasta `*nbytes`.
