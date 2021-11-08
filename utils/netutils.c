@@ -12,7 +12,7 @@
 #include <time.h>
 #include <stdbool.h>
 
-#include "include/netutils.h"
+#include "netutils.h"
 
 void set_address(address_info * address, const char * ip) {
     memset(&address->addr.storage, 0, sizeof(address->addr.storage));

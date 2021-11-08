@@ -9,9 +9,9 @@
 #include <netdb.h>
 #include <sys/socket.h>
 
-#include "include/selector.h"
-#include "include/stm.h"
-#include "include/pop3nio.h"
+#include "selector.h"
+#include "stm.h"
+#include "pop3nio.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 

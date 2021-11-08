@@ -7,9 +7,9 @@
 #include <unistd.h>
 
 // #include "./include/args.h"
-#include "../utils/include/netutils.h"
-#include "./include/selector.h"
-#include "./include/pop3nio.h"
+#include "netutils.h"
+#include "selector.h"
+#include "pop3nio.h"
 
 #define BACKLOG 250
 #define BUFFER_SIZE 4000

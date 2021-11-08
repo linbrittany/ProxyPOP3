@@ -1,5 +1,19 @@
-all: pop3filter/*.c utils/*.c
-	gcc --std=c11 -pedantic  -pthread -pedantic-errors -Wall -Wextra -Werror -Wno-unused-parameter -Wno-implicit-fallthrough -D_POSIX_C_SOURCE=200112L pop3filter/*.c utils/*.c -g -o main
+include Makefile.inc
+
+rm       = rm -rf
+
+all: proxy link
+
+proxy:
+	cd pop3filter; make all
+	cd utils; make all
 
 clean:
-	rm -f main
+	cd utils; make clean
+	cd pop3filter; make clean
+	@$(rm) main
+
+link:
+	$(LINKER) $(LFLAGS) ./utils/*.o ./pop3filter/*.o -o main
+
+.PHONY: all clean
