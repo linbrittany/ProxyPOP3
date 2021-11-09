@@ -17,71 +17,11 @@
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
-/** maquina de estados general */
-enum pop3state {
-    RESOLVING,
-    CONNECTING,
-    HELLO,
-    CHECK_CAPABILITIES,
-    COPY,
-    SEND_ERROR_MSG,
-
-    // estados terminales
-    DONE,
-    ERROR,
-};
-
-/** obtiene el struct (pop3 *) desde la llave de seleccion  */
-#define ATTACHMENT(key) ( (struct pop3 *)(key)->data)
-
-/* declaracion forward de los handlers de seleccion de una conexion
- * establecida entre un cliente y el proxy.
- */
-static void pop3_read   (struct selector_key *key);
-static void pop3_write  (struct selector_key *key);
-static void pop3_block  (struct selector_key *key);
-static void pop3_close  (struct selector_key *key);
-static void *resolv_blocking(void * data );
-static unsigned resolv_done(struct selector_key* key);
-
-static unsigned connection_code(struct selector_key * key);
-
-static const struct fd_handler pop3_handler = {
-    .handle_read   = pop3_read,
-    .handle_write  = pop3_write,
-    .handle_close  = pop3_close,
-    .handle_block  = pop3_block,
-};
-
-//Funciones para los distintos estados del cliente
-static const struct state_definition client_state_def[] = {
-    {
-        .state = RESOLVING,
-        .on_block_ready = resolv_done, 
-    }, {
-        .state = CONNECTING,
-        .on_write_ready = connection_code,
-    }, {
-        .state = HELLO,
-    }, {
-        .state = CHECK_CAPABILITIES,
-    }, {
-        .state = COPY,
-    }, {
-        .state = SEND_ERROR_MSG,
-    }, {
-        .state = DONE,
-    }, {
-        .state = ERROR,
-    }
-};
-
-
 typedef struct copy
 {
 
     int *fd;
-    buffer *read_b,*write_b;
+    struct buffer *read_b,*write_b;
     struct copy *other;
     fd_interest duplex;
 }copy;
@@ -120,6 +60,76 @@ struct pop3 {
 
     struct pop3 * next;
 };
+
+
+/** maquina de estados general */
+enum pop3state {
+    RESOLVING,
+    CONNECTING,
+    HELLO,
+    CHECK_CAPABILITIES,
+    COPY,
+    SEND_ERROR_MSG,
+
+    // estados terminales
+    DONE,
+    ERROR,
+};
+
+/** obtiene el struct (pop3 *) desde la llave de seleccion  */
+#define ATTACHMENT(key) ( (struct pop3 *)(key)->data)
+
+/* declaracion forward de los handlers de seleccion de una conexion
+ * establecida entre un cliente y el proxy.
+ */
+static void pop3_read   (struct selector_key *key);
+static void pop3_write  (struct selector_key *key);
+static void pop3_block  (struct selector_key *key);
+static void pop3_close  (struct selector_key *key);
+static void *resolv_blocking(void * data );
+static unsigned resolv_done(struct selector_key* key);
+
+static unsigned connection_code(struct selector_key * key);
+static unsigned copy_w(struct selector_key *key);
+static unsigned copy_r(struct selector_key *key);
+static fd_interest copy_interest(fd_selector s, struct copy *c);
+static void copy_init(const unsigned state, struct selector_key *key);
+struct copy * copy_ptr(struct selector_key * key) ;
+
+static const struct fd_handler pop3_handler = {
+    .handle_read   = pop3_read,
+    .handle_write  = pop3_write,
+    .handle_close  = pop3_close,
+    .handle_block  = pop3_block,
+};
+
+//Funciones para los distintos estados del cliente
+static const struct state_definition client_state_def[] = {
+    {
+        .state = RESOLVING,
+        .on_block_ready = resolv_done, 
+    }, {
+        .state = CONNECTING,
+        .on_write_ready = connection_code,
+    }, {
+        .state = HELLO,
+    }, {
+        .state = CHECK_CAPABILITIES,
+    }, {
+        .state = COPY,
+        .on_arrival = copy_init,
+        .on_read_ready = copy_r,
+        .on_write_ready = copy_w,
+    }, {
+        .state = SEND_ERROR_MSG,
+    }, {
+        .state = DONE,
+    }, {
+        .state = ERROR,
+    }
+};
+
+
 
 
 static unsigned connecting(fd_selector s, struct pop3 * proxy);
@@ -291,7 +301,7 @@ static unsigned resolv_done(struct selector_key* key) {
  */
 static unsigned connecting(fd_selector s, struct pop3 * proxy) {
     address_info originAddrData = proxy->origin_addr_data;
-    
+    printf("ESTOY EN CONNECTING");
     proxy->origin_fd = socket(originAddrData.domain, SOCK_STREAM, IPPROTO_TCP);
 
     if(proxy->origin_fd == -1)
@@ -407,7 +417,7 @@ static unsigned connection_code(struct selector_key * key) {
 
 
 
-/*
+
 struct copy * copy_ptr(struct selector_key * key) {
     struct pop3 * proxy_pop3 = ATTACHMENT(key);
     if (key->fd == proxy_pop3->client_fd) {
@@ -420,16 +430,16 @@ static void copy_init(const unsigned state, struct selector_key *key){
     struct copy *c = &ATTACHMENT(key) -> client.copy;
 
     c->fd = &ATTACHMENT(key)->client_fd;
-    c->read_b = &ATTACHMENT(key)->read_buffer;
-    c->write_b = &ATTACHMENT(key)->write_buffer;
+    c->read_b = ATTACHMENT(key)->read_buffer; //juan lo tiene con &
+    c->write_b = ATTACHMENT(key)->write_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->orig.copy;
 
     c = &ATTACHMENT(key)->orig.copy;
 
     c->fd = &ATTACHMENT(key)->origin_fd;
-    c->read_b = &ATTACHMENT(key)->write_buffer;
-    c->write_b = &ATTACHMENT(key)->read_buffer;
+    c->read_b = ATTACHMENT(key)->write_buffer;
+    c->write_b = ATTACHMENT(key)->read_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->client.copy;
     
@@ -489,7 +499,7 @@ static unsigned copy_r(struct selector_key *key){
 
 
 static unsigned copy_w(struct selector_key *key){
-    struct copy *c = copy_ptr(key); //ver q es esto?
+    struct copy *c = copy_ptr(key); 
 
     assert(*c->fd == key->fd);
     size_t size;
@@ -507,7 +517,7 @@ static unsigned copy_w(struct selector_key *key){
             c->other->duplex &= -OP_READ;
         }
     }else{
-        buffer_write_adv(c,n);
+        buffer_write_adv(b,n);
     }
     copy_interest(key->s,c);
     copy_interest(key->s,c->other);
@@ -517,5 +527,4 @@ static unsigned copy_w(struct selector_key *key){
 
     return ret;
 }
-*/
 

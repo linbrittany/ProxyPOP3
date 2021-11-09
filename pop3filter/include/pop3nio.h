@@ -4,7 +4,6 @@
 #include <buffer.h>
 
 
-
 struct proxy_args {
     size_t buffer_size;
     char *stderr_file_path;
