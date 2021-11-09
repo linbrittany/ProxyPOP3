@@ -26,7 +26,11 @@ typedef struct copy
     fd_interest duplex;
 }copy;
 
-
+typedef struct error_container {
+    char * message;
+    size_t message_length;
+    size_t sended_size;
+} error_container;
 
 
 struct pop3 {
@@ -38,6 +42,8 @@ struct pop3 {
 
     struct buffer * read_buffer;
     struct buffer * write_buffer;
+
+    error_container error_sender;
 
     /** estados para el client_fd */
     union {
@@ -88,6 +94,7 @@ static void pop3_block  (struct selector_key *key);
 static void pop3_close  (struct selector_key *key);
 static void *resolv_blocking(void * data );
 static unsigned resolv_done(struct selector_key* key);
+static unsigned write_error_msg(struct selector_key * key);
 
 static unsigned connection_code(struct selector_key * key);
 static unsigned copy_w(struct selector_key *key);
@@ -123,6 +130,7 @@ static const struct state_definition client_state_def[] = {
         .on_write_ready = copy_w,
     }, {
         .state = SEND_ERROR_MSG,
+        .on_write_ready = write_error_msg,
     }, {
         .state = DONE,
     }, {
@@ -225,7 +233,7 @@ void pop3_passive_accept(struct selector_key *key) {
         if(-1 == pthread_create(&tid, 0, resolv_blocking, blockingKey)) {            
             // logError("Unable to create a new thread. Client Address: %s", state->session.clientString);
             
-            // proxy->errorSender.message = "-ERR Unable to connect.\r\n";
+            // proxy->error_sender.message = "-ERR Unable to connect.\r\n";
             if(SELECTOR_SUCCESS != selector_set_interest(key->s, state->client_fd, OP_WRITE))
                 goto fail2;
             state->stm.initial = SEND_ERROR_MSG;
@@ -291,7 +299,7 @@ static unsigned resolv_done(struct selector_key* key) {
         freeaddrinfo(proxy->origin_resolution);
         proxy->origin_resolution = 0;
     } else {
-        // proxy->errorSender.message = "-ERR Connection refused.\r\n";
+        // proxy->error_sender.message = "-ERR Connection refused.\r\n";
         if(SELECTOR_SUCCESS != selector_set_interest(key->s, proxy->client_fd, OP_WRITE))
             return ERROR;
         return SEND_ERROR_MSG;
@@ -343,7 +351,7 @@ static unsigned connecting(fd_selector s, struct pop3 * proxy) {
 
 finally:    
     // logError("Problem connecting to origin server. Client Address: %s", proxy->session.clientString);
-    // proxy->errorSender.message = "-ERR Connection refused.\r\n";
+    // proxy->error_sender.message = "-ERR Connection refused.\r\n";
     if(SELECTOR_SUCCESS != selector_set_interest(s, proxy->client_fd, OP_WRITE))
         return ERROR;
     return SEND_ERROR_MSG;
@@ -428,7 +436,7 @@ static unsigned connection_code(struct selector_key * key) {
 }
 
 
-
+// COPY
 
 struct copy * copy_ptr(struct selector_key * key) {
   
@@ -542,3 +550,27 @@ static unsigned copy_w(struct selector_key *key){
     return ret;
 }
 
+// SEND_ERROR_MSG
+static unsigned write_error_msg(struct selector_key * key) {
+    struct pop3 * proxy = ATTACHMENT(key);
+    unsigned ret = SEND_ERROR_MSG;
+
+    if(proxy->error_sender.message == NULL)
+        return ERROR;
+    if(proxy->error_sender.message_length == 0)
+        proxy->error_sender.message_length = strlen(proxy->error_sender.message);
+        
+    // logDebg("Enviando error: %s", proxy->error_sender.message);
+    char *   ptr  = proxy->error_sender.message + proxy->error_sender.sended_size;
+    ssize_t  size = proxy->error_sender.message_length - proxy->error_sender.sended_size;
+    ssize_t  n    = send(proxy->client_fd, ptr, size, MSG_NOSIGNAL);
+    if(n == -1) {
+        shutdown(proxy->client_fd, SHUT_WR);
+        ret = ERROR;
+    } else {
+        proxy->error_sender.sended_size += n;
+        if(proxy->error_sender.sended_size == proxy->error_sender.message_length) 
+            return ERROR;
+    }
+    return ret;
+}
