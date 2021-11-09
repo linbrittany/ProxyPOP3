@@ -494,10 +494,7 @@ static unsigned copy_r(struct selector_key *key){
     unsigned ret = COPY; 
 
     uint8_t *ptr = buffer_write_ptr(b,&size);
-    printf("COPY");
-    printf("%ld",size);
     n = recv(key->fd,ptr,size,0);
-
     if(n<=0){
         shutdown(*c->fd,SHUT_RD);
         c->duplex &= -OP_WRITE;

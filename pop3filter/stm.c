@@ -4,7 +4,7 @@
  */
 #include <stdlib.h>
 #include "stm.h"
-
+#include <stdio.h>
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
 void stm_init(struct state_machine *stm) {
@@ -48,6 +48,7 @@ inline static void jump(struct state_machine *stm, unsigned next, struct selecto
 }
 
 unsigned stm_handler_read(struct state_machine *stm, struct selector_key *key) {
+    printf("ESTOY EN EL READ");
     handle_first(stm, key);
     if(stm->current->on_read_ready == 0) {
         abort();
