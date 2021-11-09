@@ -41,6 +41,8 @@ static void pop3_read   (struct selector_key *key);
 static void pop3_write  (struct selector_key *key);
 static void pop3_block  (struct selector_key *key);
 static void pop3_close  (struct selector_key *key);
+static void *resolv_blocking(void * data );
+static unsigned resolv_done(struct selector_key* key);
 
 static unsigned connection_code(struct selector_key * key);
 
@@ -55,7 +57,7 @@ static const struct fd_handler pop3_handler = {
 static const struct state_definition client_state_def[] = {
     {
         .state = RESOLVING,
-        .on_block_ready = NULL, 
+        .on_block_ready = resolv_done, 
     }, {
         .state = CONNECTING,
         .on_write_ready = connection_code,
@@ -105,6 +107,9 @@ struct pop3 {
 
     struct pop3 * next;
 };
+
+
+static unsigned connecting(fd_selector s, struct pop3 * proxy);
 
  /** realmente destruye */
 static void pop3_destroy_(struct pop3* s) {
@@ -156,8 +161,9 @@ static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info or
 void pop3_passive_accept(struct selector_key *key) {
     struct sockaddr_storage client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
-    struct pop3 *state = NULL;
     address_info * origin_addr_data = (address_info *) key->data;
+    struct pop3 *state = NULL;
+    pthread_t tid;
 
     const int client = accept(key->fd, (struct sockaddr*) &client_addr, &client_addr_len);
     if(client == -1) {
@@ -179,16 +185,143 @@ void pop3_passive_accept(struct selector_key *key) {
     if(SELECTOR_SUCCESS != selector_register(key->s, client, &pop3_handler, OP_READ, state)) {
         goto fail;
     }
+    if(origin_addr_data->type != ADDR_DOMAIN) 
+        state->stm.initial = connecting(key->s, state);
+    else {
+        // logInfo("Need to resolv the domain name: %s.", origin_addr_data->addr.fqdn);
+        struct selector_key * blockingKey = malloc(sizeof(*blockingKey));
+        if(blockingKey == NULL)
+            goto fail2;
+
+        blockingKey->s  = key->s;
+        blockingKey->fd   = client;
+        blockingKey->data = state;
+        if(-1 == pthread_create(&tid, 0, resolv_blocking, blockingKey)) {            
+            // logError("Unable to create a new thread. Client Address: %s", state->session.clientString);
+            
+            // proxy->errorSender.message = "-ERR Unable to connect.\r\n";
+            if(SELECTOR_SUCCESS != selector_set_interest(key->s, state->client_fd, OP_WRITE))
+                goto fail2;
+            state->stm.initial = SEND_ERROR_MSG;
+        }
+    }
+
     return ;
 
     //Crear socket entre proxy y servidor origen y registrarlo para escritura
-
+fail2:
+    selector_unregister_fd(key->s, client);
 fail:
     if(client != -1) {
         close(client);
     }
     pop3_destroy(state);
 }
+
+/**
+ * Realiza la resolución de DNS bloqueante.
+ *
+ * Una vez resuelto notifica al selector para que el evento esté
+ * disponible en la próxima iteración.
+ */
+static void *resolv_blocking(void * data ) {
+    struct selector_key* key = (struct selector_key * ) data;
+    struct pop3 *proxy = ATTACHMENT(key);
+
+    pthread_detach(pthread_self());
+    proxy->origin_resolution = 0;
+    struct addrinfo hints = {
+        .ai_family    = AF_UNSPEC,    
+        /** Permite IPv4 o IPv6. */
+        .ai_socktype  = SOCK_STREAM,  
+        .ai_flags     = AI_PASSIVE,   
+        .ai_protocol  = 0,        
+        .ai_canonname = NULL,
+        .ai_addr      = NULL,
+        .ai_next      = NULL,
+    };
+
+    char buff[7];
+    snprintf(buff, sizeof(buff),"%d", proxy->origin_addr_data.port);
+    getaddrinfo(proxy->origin_addr_data.addr.fqdn,buff,&hints,&proxy->origin_resolution);
+    selector_notify_block(key->s,key->fd);
+
+    free(data);
+    return 0;
+}
+
+/**
+ * Procesa el resultado de la resolución de nombres. 
+ */
+static unsigned resolv_done(struct selector_key* key) {
+    struct pop3 * proxy = ATTACHMENT(key);
+    if(proxy->origin_resolution != 0) {
+        proxy->origin_addr_data.domain = proxy->origin_resolution->ai_family;
+        proxy->origin_addr_data.addr_len = proxy->origin_resolution->ai_addrlen;
+        memcpy(&proxy->origin_addr_data.addr.storage,
+                proxy->origin_resolution->ai_addr,
+                proxy->origin_resolution->ai_addrlen);
+        freeaddrinfo(proxy->origin_resolution);
+        proxy->origin_resolution = 0;
+    } else {
+        // proxy->errorSender.message = "-ERR Connection refused.\r\n";
+        if(SELECTOR_SUCCESS != selector_set_interest(key->s, proxy->client_fd, OP_WRITE))
+            return ERROR;
+        return SEND_ERROR_MSG;
+    }
+
+    return connecting(key->s, proxy);
+}
+
+/** 
+ * Intenta establecer una conexión con el origin server. 
+ */
+static unsigned connecting(fd_selector s, struct pop3 * proxy) {
+    address_info originAddrData = proxy->origin_addr_data;
+    
+    proxy->origin_fd = socket(originAddrData.domain, SOCK_STREAM, IPPROTO_TCP);
+
+    if(proxy->origin_fd == -1)
+        goto finally;
+    if(selector_fd_set_nio(proxy->origin_fd) == -1)
+        goto finally;
+
+    if(connect(proxy->origin_fd, (const struct sockaddr *) &originAddrData.addr.storage, originAddrData.addr_len) == -1) {
+        if(errno == EINPROGRESS) {
+            /**
+             * Es esperable,  tenemos que esperar a la conexión.
+             * Dejamos de pollear el socket del cliente.
+             */
+            selector_status status = selector_set_interest(s, proxy->client_fd, OP_NOOP);
+            if(status != SELECTOR_SUCCESS) 
+                goto finally;
+
+            /** Esperamos la conexion en el nuevo socket. */
+            status = selector_register(s, proxy->origin_fd, &pop3_handler, OP_WRITE, proxy);
+            if(status != SELECTOR_SUCCESS) 
+                goto finally;
+        
+            proxy->references += 1;
+        }
+    } else {
+        /**
+         * Estamos conectados sin esperar... no parece posible
+         * Saltaríamos directamente a COPY.
+         */
+        // logError("Problem: connected to origin server without wait. Client Address: %s", proxy->session.clientString);
+    }
+    
+    return CONNECTING;
+
+finally:    
+    // logError("Problem connecting to origin server. Client Address: %s", proxy->session.clientString);
+    // proxy->errorSender.message = "-ERR Connection refused.\r\n";
+    if(SELECTOR_SUCCESS != selector_set_interest(s, proxy->client_fd, OP_WRITE))
+        return ERROR;
+    return SEND_ERROR_MSG;
+}
+
+
 
 // Handlers top level de la conexion pasiva.
 // son los que emiten los eventos a la maquina de estados.
