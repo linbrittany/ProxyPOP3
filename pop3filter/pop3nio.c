@@ -13,7 +13,7 @@
 #include "stm.h"
 #include "pop3nio.h"
 #include "buffer.h"
-#include "netutils.h"
+#include "../utils/include/netutils.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
@@ -77,6 +77,19 @@ static const struct state_definition client_state_def[] = {
     }
 };
 
+
+typedef struct copy
+{
+
+    int *fd;
+    buffer *read_b,*write_b;
+    struct copy *other;
+    fd_interest duplex;
+}copy;
+
+
+
+
 struct pop3 {
     int client_fd;
     int origin_fd;
@@ -87,17 +100,17 @@ struct pop3 {
     struct buffer * read_buffer;
     struct buffer * write_buffer;
 
-    // /** estados para el client_fd */
+    /** estados para el client_fd */
     union {
-        // struct hello_st hello;
-        // struct request_st request;
-        // struct copy copy;
-    } client;
-    // /** estados para el origin_fd */
-    union {
-        // struct connecting conn;
-        // struct copy copy;
-    } origin;
+        //struct hello_st hello;
+        //struct request_st request;
+        struct copy copy;
+     } client;
+    /** estados para el origin_fd */
+     union {
+        //struct connecting conn;
+        struct copy copy;
+     } orig;
 
     address_info origin_addr_data;
 
@@ -392,3 +405,118 @@ static unsigned connection_done(struct selector_key * key) {
     }
     return ERROR;
 }
+
+
+
+/*
+struct copy * copy_ptr(struct selector_key * key) {
+    struct pop3 * proxy_pop3 = ATTACHMENT(key);
+    if (key->fd == proxy_pop3->client_fd) {
+        return &proxy_pop3->client.copy;
+    }
+    return &proxy_pop3->orig.copy;
+}
+
+static void copy_init(const unsigned state, struct selector_key *key){
+    struct copy *c = &ATTACHMENT(key) -> client.copy;
+
+    c->fd = &ATTACHMENT(key)->client_fd;
+    c->read_b = &ATTACHMENT(key)->read_buffer;
+    c->write_b = &ATTACHMENT(key)->write_buffer;
+    c->duplex = OP_READ | OP_WRITE;
+    c->other = &ATTACHMENT(key)->orig.copy;
+
+    c = &ATTACHMENT(key)->orig.copy;
+
+    c->fd = &ATTACHMENT(key)->origin_fd;
+    c->read_b = &ATTACHMENT(key)->write_buffer;
+    c->write_b = &ATTACHMENT(key)->read_buffer;
+    c->duplex = OP_READ | OP_WRITE;
+    c->other = &ATTACHMENT(key)->client.copy;
+    
+
+}
+
+
+static fd_interest copy_interest(fd_selector s, struct copy *c){
+    fd_interest ret = OP_NOOP;
+    if((c->duplex & OP_READ) && buffer_can_write(c->read_b)){
+        ret |= OP_READ; //me subscribo si tengo lugar en el buffer 
+    }
+
+    if((c->duplex & OP_WRITE) && buffer_can_read(c->write_b)){
+        ret |= OP_WRITE;
+    }
+    if(SELECTOR_SUCCESS != selector_set_interest(s,*c->fd,ret)){
+        abort(); //TODO mensaje de error?
+    }
+
+    return ret;
+
+}
+
+static unsigned copy_r(struct selector_key *key){
+    struct copy *c = copy_ptr(key); //ver q es esto?
+
+    assert(*c->fd == key->fd);
+    size_t size;
+    ssize_t n;
+    buffer *b = c->read_b;
+    unsigned ret = COPY; //ESTADO DE RETORNO?
+
+    uint8_t *ptr = buffer_write_ptr(b,&size);
+    n = recv(key->fd,ptr,size,0);
+
+    if(n<=0){
+        shutdown(*c->fd,SHUT_RD);
+        c->duplex &= -OP_WRITE;
+        if(*c->other->fd!=-1){
+            shutdown(*c->other->fd,SHUT_WR);
+            c->other->duplex &= -OP_WRITE;
+        }
+
+    }else{
+        buffer_write_adv(b,n); 
+    }
+
+    copy_interest(key->s,c);
+    copy_interest(key->s,c->other);
+    if(c->duplex == OP_NOOP){
+        ret = DONE;
+    }
+
+    return ret;
+}
+
+
+static unsigned copy_w(struct selector_key *key){
+    struct copy *c = copy_ptr(key); //ver q es esto?
+
+    assert(*c->fd == key->fd);
+    size_t size;
+    ssize_t n;
+    buffer *b = c->write_b;
+    unsigned ret = COPY; //ESTADO DE RETORNO?
+
+    uint8_t *ptr = buffer_read_ptr(b,&size);
+    n = send(key->fd,ptr,size,MSG_NOSIGNAL);
+    if(n==-1){
+        shutdown(*c->fd,SHUT_WR);
+        c->duplex &= -OP_WRITE;
+        if(*c->other->fd!=-1){
+            shutdown(*c->other->fd,SHUT_RD);
+            c->other->duplex &= -OP_READ;
+        }
+    }else{
+        buffer_write_adv(c,n);
+    }
+    copy_interest(key->s,c);
+    copy_interest(key->s,c->other);
+    if(c->duplex == OP_NOOP){ //SE CERRARON LOS DOS 
+        ret = DONE;
+    }
+
+    return ret;
+}
+*/
+
