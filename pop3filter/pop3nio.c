@@ -13,6 +13,7 @@
 #include "stm.h"
 #include "pop3nio.h"
 #include "buffer.h"
+#include "netutils.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
@@ -41,6 +42,8 @@ static void pop3_write  (struct selector_key *key);
 static void pop3_block  (struct selector_key *key);
 static void pop3_close  (struct selector_key *key);
 
+static unsigned connection_code(struct selector_key * key);
+
 static const struct fd_handler pop3_handler = {
     .handle_read   = pop3_read,
     .handle_write  = pop3_write,
@@ -55,6 +58,7 @@ static const struct state_definition client_state_def[] = {
         .on_block_ready = NULL, 
     }, {
         .state = CONNECTING,
+        .on_write_ready = connection_code,
     }, {
         .state = HELLO,
     }, {
@@ -63,6 +67,10 @@ static const struct state_definition client_state_def[] = {
         .state = COPY,
     }, {
         .state = SEND_ERROR_MSG,
+    }, {
+        .state = DONE,
+    }, {
+        .state = ERROR,
     }
 };
 
@@ -87,6 +95,8 @@ struct pop3 {
     //     struct connecting conn;
     //     struct copy copy;
     // } orig;
+
+    address_info origin_addr_data;
 
     struct addrinfo *origin_resolution; //No pisarlo porque hay que liberarlo
     struct addrinfo *curr_origin_resolution; 
@@ -128,12 +138,13 @@ static void pop3_destroy(struct pop3 *s) {
     }
 }
 
-static struct pop3 * pop3_new(int client_fd, size_t buffer_size) {
+static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info origin_addr_data) {
     struct pop3 * new_pop3 = malloc(sizeof(struct pop3));
     memset(new_pop3, 0, sizeof(struct pop3));
     new_pop3->client_fd = client_fd;
     new_pop3->origin_fd = -1;
     new_pop3->read_buffer = buffer_init(buffer_size);
+    new_pop3->origin_addr_data = origin_addr_data;
 
     new_pop3->stm.initial = RESOLVING;
     new_pop3->stm.max_state = ERROR;
@@ -146,6 +157,7 @@ void pop3_passive_accept(struct selector_key *key) {
     struct sockaddr_storage client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     struct pop3 *state = NULL;
+    address_info * origin_addr_data = (address_info *) key->data;
 
     const int client = accept(key->fd, (struct sockaddr*) &client_addr, &client_addr_len);
     if(client == -1) {
@@ -154,7 +166,7 @@ void pop3_passive_accept(struct selector_key *key) {
     if(selector_fd_set_nio(client) == -1) {
         goto fail;
     }
-    state = pop3_new(client, args.buffer_size);
+    state = pop3_new(client, args.buffer_size, *origin_addr_data);
     if(state == NULL) {
         // sin un estado, nos es imposible manejaro.
         // tal vez deberiamos apagar accept() hasta que detectemos
@@ -192,7 +204,7 @@ static void pop3_read(struct selector_key *key) {
 }
 
 static void pop3_write(struct selector_key *key) {
-    struct state_machine *stm   = &ATTACHMENT(key)->stm;
+    struct state_machine *stm = &ATTACHMENT(key)->stm;
     const enum pop3state st = stm_handler_write(stm, key);
 
     if(ERROR == st || DONE == st) {
@@ -228,3 +240,21 @@ static void pop3_done(struct selector_key *key) {
     }
 }
 
+//CONNECTING
+
+static unsigned connection_code(struct selector_key * key) {
+    struct pop3 * proxy_pop3 = ATTACHMENT(key);
+    int error = -1;
+    socklen_t len = sizeof(error);
+
+    if ((error = getsockopt(key->fd, SOL_SOCKET, SO_ERROR, &error, &len)) >= 0) {
+        if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy_pop3->client_fd, OP_WRITE)) { //Setear cliente para escritura
+            return SEND_ERROR_MSG;
+        }
+        return ERROR;
+    }
+    else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) {
+        return HELLO;
+    }
+    return ERROR;
+}

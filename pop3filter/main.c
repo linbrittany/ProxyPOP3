@@ -241,7 +241,7 @@ int main(int argc, char const **argv) {
         .handle_close = NULL, // nada que liberar
     };
 
-    set_address(&origin_addr_data,args.listen_origin_address);
+    set_address(&origin_addr_data, args.listen_origin_address);
 
     //Agregar origin addr al selector register del proxy
     if ((ss = selector_register(selector, proxy, &pop3, OP_READ, &origin_addr_data)) != SELECTOR_SUCCESS) {

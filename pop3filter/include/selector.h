@@ -111,9 +111,9 @@ struct selector_key {
     /** el selector que dispara el evento */
     fd_selector s;
     /** el file descriptor en cuestión */
-    int         fd;
+    int fd;
     /** dato provisto por el usuario */
-    void *      data;
+    void * data;
 };
 
 /**
