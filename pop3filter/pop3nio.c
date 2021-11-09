@@ -13,7 +13,8 @@
 #include "stm.h"
 #include "pop3nio.h"
 #include "buffer.h"
-#include "../utils/include/netutils.h"
+#include "netutils.h"
+#include "hello_parser.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
@@ -80,15 +81,16 @@ static const struct state_definition client_state_def[] = {
 
 typedef struct copy
 {
-
     int *fd;
-    buffer *read_b,*write_b;
+    buffer *read_b, *write_b;
     struct copy *other;
     fd_interest duplex;
 }copy;
 
-
-
+typedef struct hello_st {
+    struct buffer * write_buffer;
+    struct hello_parser parser;
+} hello_st;
 
 struct pop3 {
     int client_fd;
@@ -102,15 +104,15 @@ struct pop3 {
 
     /** estados para el client_fd */
     union {
-        //struct hello_st hello;
-        //struct request_st request;
+        struct hello_st hello;
         struct copy copy;
      } client;
     /** estados para el origin_fd */
      union {
+        struct hello_st hello;
         //struct connecting conn;
         struct copy copy;
-     } orig;
+     } origin;
 
     address_info origin_addr_data;
 
@@ -405,6 +407,8 @@ static unsigned connection_done(struct selector_key * key) {
     }
     return ERROR;
 }
+
+//HELLO
 
 
 
