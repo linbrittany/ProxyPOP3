@@ -86,17 +86,17 @@ struct pop3 {
     struct buffer * read_buffer;
     struct buffer * write_buffer;
 
-    // /** estados para el client_fd */
-    // union {
-    //     struct hello_st hello;
-    //     struct request_st request;
-    //     struct copy copy;
-    // } client;
-    // /** estados para el origin_fd */
-    // union {
-    //     struct connecting conn;
-    //     struct copy copy;
-    // } orig;
+    /** estados para el client_fd */
+    union {
+        //struct hello_st hello;
+        //struct request_st request;
+        struct copy copy;
+     } client;
+    /** estados para el origin_fd */
+     union {
+        //struct connecting conn;
+        struct copy copy;
+     } orig;
 
     address_info origin_addr_data;
 
@@ -392,9 +392,27 @@ static unsigned connection_code(struct selector_key * key) {
     return ERROR;
 }
 
+
 /*
-static void hello_init(const unsigned state, struct selector_key *key){
-    //struct hello_st *h = &ATTACHMENT(key) -> client.hello;
+static void copy_init(const unsigned state, struct selector_key *key){
+    struct copy *c = &ATTACHMENT(key) -> client.copy;
+
+    c->fd = &ATTACHMENT(key)->client_fd;
+    c->read_b = &ATTACHMENT(key)->read_buffer;
+    c->write_b = &ATTACHMENT(key)->write_buffer;
+    c->duplex = OP_READ | OP_WRITE;
+    c->other = &ATTACHMENT(key)->orig.copy;
+
+    c = &ATTACHMENT(key)->orig.copy;
+
+    c->fd = &ATTACHMENT(key)->origin_fd;
+    c->read_b = &ATTACHMENT(key)->write_buffer;
+    c->write_b = &ATTACHMENT(key)->read_buffer;
+    c->duplex = OP_READ | OP_WRITE;
+    c->other = &ATTACHMENT(key)->client.copy;
+    
 
 }
 */
+
+
