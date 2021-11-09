@@ -41,10 +41,11 @@ static void pop3_read   (struct selector_key *key);
 static void pop3_write  (struct selector_key *key);
 static void pop3_block  (struct selector_key *key);
 static void pop3_close  (struct selector_key *key);
+
 static void *resolv_blocking(void * data );
 static unsigned resolv_done(struct selector_key* key);
-
-static unsigned connection_code(struct selector_key * key);
+static unsigned connecting(fd_selector s, struct pop3 * proxy);
+static unsigned connection_done(struct selector_key * key);
 
 static const struct fd_handler pop3_handler = {
     .handle_read   = pop3_read,
@@ -60,7 +61,7 @@ static const struct state_definition client_state_def[] = {
         .on_block_ready = resolv_done, 
     }, {
         .state = CONNECTING,
-        .on_write_ready = connection_code,
+        .on_write_ready = connection_done,
     }, {
         .state = HELLO,
     }, {
@@ -87,16 +88,16 @@ struct pop3 {
     struct buffer * write_buffer;
 
     // /** estados para el client_fd */
-    // union {
-    //     struct hello_st hello;
-    //     struct request_st request;
-    //     struct copy copy;
-    // } client;
+    union {
+        // struct hello_st hello;
+        // struct request_st request;
+        // struct copy copy;
+    } client;
     // /** estados para el origin_fd */
-    // union {
-    //     struct connecting conn;
-    //     struct copy copy;
-    // } orig;
+    union {
+        // struct connecting conn;
+        // struct copy copy;
+    } origin;
 
     address_info origin_addr_data;
 
@@ -108,8 +109,100 @@ struct pop3 {
     struct pop3 * next;
 };
 
+void pop3_passive_accept(struct selector_key *key) {
+    struct sockaddr_storage client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+    address_info * origin_addr_data = (address_info *) key->data;
+    struct pop3 *state = NULL;
+    pthread_t tid;
 
-static unsigned connecting(fd_selector s, struct pop3 * proxy);
+    const int client = accept(key->fd, (struct sockaddr*) &client_addr, &client_addr_len);
+    if(client == -1) {
+        goto fail;
+    }
+    if(selector_fd_set_nio(client) == -1) {
+        goto fail;
+    }
+    state = pop3_new(client, args.buffer_size, *origin_addr_data);
+    if(state == NULL) {
+        // sin un estado, nos es imposible manejaro.
+        // tal vez deberiamos apagar accept() hasta que detectemos
+        // que se liberÃ³ alguna conexiÃ³n.
+        goto fail;
+    }
+    // memcpy(&state->client_addr, &client_addr, client_addr_len);
+    // state->client_addr_len = client_addr_len;
+
+    if(SELECTOR_SUCCESS != selector_register(key->s, client, &pop3_handler, OP_NOOP, state)) {
+        goto fail;
+    }
+    
+    if(origin_addr_data->type != ADDR_DOMAIN) 
+        state->stm.initial = connecting(key->s, state);
+    else {
+        // logInfo("Need to resolv the domain name: %s.", origin_addr_data->addr.fqdn);
+        struct selector_key * blockingKey = malloc(sizeof(*blockingKey));
+        if(blockingKey == NULL)
+            goto fail2;
+
+        blockingKey->s  = key->s;
+        blockingKey->fd   = client;
+        blockingKey->data = state;
+        if(-1 == pthread_create(&tid, 0, resolv_blocking, blockingKey)) {            
+            // logError("Unable to create a new thread. Client Address: %s", state->session.clientString);
+            
+            // proxy->errorSender.message = "-ERR Unable to connect.\r\n";
+            if(SELECTOR_SUCCESS != selector_set_interest(key->s, state->client_fd, OP_WRITE))
+                goto fail2;
+            state->stm.initial = SEND_ERROR_MSG;
+        }
+    }
+
+    return ;
+
+    //Crear socket entre proxy y servidor origen y registrarlo para escritura
+fail2:
+    selector_unregister_fd(key->s, client);
+fail:
+    if(client != -1) {
+        close(client);
+    }
+    pop3_destroy(state);
+}
+
+/**
+ * Realiza la resolución de DNS bloqueante.
+ *
+ * Una vez resuelto notifica al selector para que el evento esté
+ * disponible en la próxima iteración.
+ */
+static void *resolv_blocking(void * data) {
+    struct selector_key* key = (struct selector_key * ) data;
+    struct pop3 *proxy = ATTACHMENT(key);
+
+    pthread_detach(pthread_self());
+    proxy->origin_resolution = 0;
+    struct addrinfo hints = {
+        .ai_family    = AF_UNSPEC,    
+        /** Permite IPv4 o IPv6. */
+        .ai_socktype  = SOCK_STREAM,  
+        .ai_flags     = AI_PASSIVE,   
+        .ai_protocol  = 0,        
+        .ai_canonname = NULL,
+        .ai_addr      = NULL,
+        .ai_next      = NULL,
+    };
+
+    char buff[7];
+    snprintf(buff, sizeof(buff), "%d", proxy->origin_addr_data.port);
+    getaddrinfo(proxy->origin_addr_data.addr.fqdn, buff, &hints, &proxy->origin_resolution);
+    selector_notify_block(key->s, key->fd);
+
+    free(data);
+    return 0;
+}
+
+//POP3
 
  /** realmente destruye */
 static void pop3_destroy_(struct pop3* s) {
@@ -158,98 +251,57 @@ static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info or
     return new_pop3;
 }
 
-void pop3_passive_accept(struct selector_key *key) {
-    struct sockaddr_storage client_addr;
-    socklen_t client_addr_len = sizeof(client_addr);
-    address_info * origin_addr_data = (address_info *) key->data;
-    struct pop3 *state = NULL;
-    pthread_t tid;
+// Handlers top level de la conexion pasiva.
+// son los que emiten los eventos a la maquina de estados.
+static void pop3_done(struct selector_key* key);
 
-    const int client = accept(key->fd, (struct sockaddr*) &client_addr, &client_addr_len);
-    if(client == -1) {
-        goto fail;
-    }
-    if(selector_fd_set_nio(client) == -1) {
-        goto fail;
-    }
-    state = pop3_new(client, args.buffer_size, *origin_addr_data);
-    if(state == NULL) {
-        // sin un estado, nos es imposible manejaro.
-        // tal vez deberiamos apagar accept() hasta que detectemos
-        // que se liberÃ³ alguna conexiÃ³n.
-        goto fail;
-    }
-    // memcpy(&state->client_addr, &client_addr, client_addr_len);
-    // state->client_addr_len = client_addr_len;
+static void pop3_read(struct selector_key *key) {
+    struct state_machine *stm   = &ATTACHMENT(key)->stm;
+    const enum pop3state st = stm_handler_read(stm, key);
 
-    if(SELECTOR_SUCCESS != selector_register(key->s, client, &pop3_handler, OP_READ, state)) {
-        goto fail;
+    if(ERROR == st || DONE == st) {
+        pop3_done(key);
     }
-    if(origin_addr_data->type != ADDR_DOMAIN) 
-        state->stm.initial = connecting(key->s, state);
-    else {
-        // logInfo("Need to resolv the domain name: %s.", origin_addr_data->addr.fqdn);
-        struct selector_key * blockingKey = malloc(sizeof(*blockingKey));
-        if(blockingKey == NULL)
-            goto fail2;
+}
 
-        blockingKey->s  = key->s;
-        blockingKey->fd   = client;
-        blockingKey->data = state;
-        if(-1 == pthread_create(&tid, 0, resolv_blocking, blockingKey)) {            
-            // logError("Unable to create a new thread. Client Address: %s", state->session.clientString);
-            
-            // proxy->errorSender.message = "-ERR Unable to connect.\r\n";
-            if(SELECTOR_SUCCESS != selector_set_interest(key->s, state->client_fd, OP_WRITE))
-                goto fail2;
-            state->stm.initial = SEND_ERROR_MSG;
+static void pop3_write(struct selector_key *key) {
+    struct state_machine *stm = &ATTACHMENT(key)->stm;
+    const enum pop3state st = stm_handler_write(stm, key);
+
+    if(ERROR == st || DONE == st) {
+        pop3_done(key);
+    }
+}
+
+static void pop3_block(struct selector_key *key) {
+    struct state_machine *stm   = &ATTACHMENT(key)->stm;
+    const enum pop3state st = stm_handler_block(stm, key);
+
+    if(ERROR == st || DONE == st) {
+        pop3_done(key);
+    }
+}
+
+static void pop3_close(struct selector_key *key) {
+    pop3_destroy(ATTACHMENT(key));
+}
+
+static void pop3_done(struct selector_key *key) {
+    const int fds[] = {
+        ATTACHMENT(key)->client_fd,
+        ATTACHMENT(key)->origin_fd,
+    };
+    for(unsigned i = 0; i < N(fds); i++) {
+        if(fds[i] != -1) {
+            if(SELECTOR_SUCCESS != selector_unregister_fd(key->s, fds[i])) {
+                abort();
+            }
+            close(fds[i]);
         }
     }
-
-    return ;
-
-    //Crear socket entre proxy y servidor origen y registrarlo para escritura
-fail2:
-    selector_unregister_fd(key->s, client);
-fail:
-    if(client != -1) {
-        close(client);
-    }
-    pop3_destroy(state);
 }
 
-/**
- * Realiza la resolución de DNS bloqueante.
- *
- * Una vez resuelto notifica al selector para que el evento esté
- * disponible en la próxima iteración.
- */
-static void *resolv_blocking(void * data ) {
-    struct selector_key* key = (struct selector_key * ) data;
-    struct pop3 *proxy = ATTACHMENT(key);
-
-    pthread_detach(pthread_self());
-    proxy->origin_resolution = 0;
-    struct addrinfo hints = {
-        .ai_family    = AF_UNSPEC,    
-        /** Permite IPv4 o IPv6. */
-        .ai_socktype  = SOCK_STREAM,  
-        .ai_flags     = AI_PASSIVE,   
-        .ai_protocol  = 0,        
-        .ai_canonname = NULL,
-        .ai_addr      = NULL,
-        .ai_next      = NULL,
-    };
-
-    char buff[7];
-    snprintf(buff, sizeof(buff),"%d", proxy->origin_addr_data.port);
-    getaddrinfo(proxy->origin_addr_data.addr.fqdn,buff,&hints,&proxy->origin_resolution);
-    selector_notify_block(key->s,key->fd);
-
-    free(data);
-    return 0;
-}
-
+//RESOLVING
 /**
  * Procesa el resultado de la resolución de nombres. 
  */
@@ -322,60 +374,9 @@ finally:
 }
 
 
-
-// Handlers top level de la conexion pasiva.
-// son los que emiten los eventos a la maquina de estados.
-static void pop3_done(struct selector_key* key);
-
-static void pop3_read(struct selector_key *key) {
-    struct state_machine *stm   = &ATTACHMENT(key)->stm;
-    const enum pop3state st = stm_handler_read(stm, key);
-
-    if(ERROR == st || DONE == st) {
-        pop3_done(key);
-    }
-}
-
-static void pop3_write(struct selector_key *key) {
-    struct state_machine *stm = &ATTACHMENT(key)->stm;
-    const enum pop3state st = stm_handler_write(stm, key);
-
-    if(ERROR == st || DONE == st) {
-        pop3_done(key);
-    }
-}
-
-static void pop3_block(struct selector_key *key) {
-    struct state_machine *stm   = &ATTACHMENT(key)->stm;
-    const enum pop3state st = stm_handler_block(stm, key);
-
-    if(ERROR == st || DONE == st) {
-        pop3_done(key);
-    }
-}
-
-static void pop3_close(struct selector_key *key) {
-    pop3_destroy(ATTACHMENT(key));
-}
-
-static void pop3_done(struct selector_key *key) {
-    const int fds[] = {
-        ATTACHMENT(key)->client_fd,
-        ATTACHMENT(key)->origin_fd,
-    };
-    for(unsigned i = 0; i < N(fds); i++) {
-        if(fds[i] != -1) {
-            if(SELECTOR_SUCCESS != selector_unregister_fd(key->s, fds[i])) {
-                abort();
-            }
-            close(fds[i]);
-        }
-    }
-}
-
 //CONNECTING
 
-static unsigned connection_code(struct selector_key * key) {
+static unsigned connection_done(struct selector_key * key) {
     struct pop3 * proxy_pop3 = ATTACHMENT(key);
     int error = -1;
     socklen_t len = sizeof(error);
