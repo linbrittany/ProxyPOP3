@@ -113,6 +113,7 @@ static const struct state_definition client_state_def[] = {
         .on_write_ready = connection_code,
     }, {
         .state = HELLO,
+        .on_read_ready = NULL,
     }, {
         .state = CHECK_CAPABILITIES,
     }, {
@@ -167,6 +168,7 @@ static void pop3_destroy(struct pop3 *s) {
 }
 
 static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info origin_addr_data) {
+
     struct pop3 * new_pop3 = malloc(sizeof(struct pop3));
     memset(new_pop3, 0, sizeof(struct pop3));
     new_pop3->client_fd = client_fd;
@@ -182,6 +184,7 @@ static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info or
 }
 
 void pop3_passive_accept(struct selector_key *key) {
+ 
     struct sockaddr_storage client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     address_info * origin_addr_data = (address_info *) key->data;
@@ -277,6 +280,7 @@ static void *resolv_blocking(void * data ) {
  * Procesa el resultado de la resolución de nombres. 
  */
 static unsigned resolv_done(struct selector_key* key) {
+    
     struct pop3 * proxy = ATTACHMENT(key);
     if(proxy->origin_resolution != 0) {
         proxy->origin_addr_data.domain = proxy->origin_resolution->ai_family;
@@ -300,8 +304,9 @@ static unsigned resolv_done(struct selector_key* key) {
  * Intenta establecer una conexión con el origin server. 
  */
 static unsigned connecting(fd_selector s, struct pop3 * proxy) {
+   
     address_info originAddrData = proxy->origin_addr_data;
-    printf("ESTOY EN CONNECTING");
+
     proxy->origin_fd = socket(originAddrData.domain, SOCK_STREAM, IPPROTO_TCP);
 
     if(proxy->origin_fd == -1)
@@ -333,7 +338,7 @@ static unsigned connecting(fd_selector s, struct pop3 * proxy) {
          */
         // logError("Problem: connected to origin server without wait. Client Address: %s", proxy->session.clientString);
     }
-    
+
     return CONNECTING;
 
 finally:    
@@ -399,26 +404,34 @@ static void pop3_done(struct selector_key *key) {
 //CONNECTING
 
 static unsigned connection_code(struct selector_key * key) {
+
     struct pop3 * proxy_pop3 = ATTACHMENT(key);
     int error = -1;
     socklen_t len = sizeof(error);
 
-    if ((error = getsockopt(key->fd, SOL_SOCKET, SO_ERROR, &error, &len)) >= 0) {
+
+
+    if ((error = getsockopt(key->fd, SOL_SOCKET, SO_ERROR, &error, &len)) < 0) {
+
         if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy_pop3->client_fd, OP_WRITE)) { //Setear cliente para escritura
             return SEND_ERROR_MSG;
         }
         return ERROR;
     }
     else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) {
-        return HELLO;
+
+        return COPY;
     }
     return ERROR;
+
+     
 }
 
 
 
 
 struct copy * copy_ptr(struct selector_key * key) {
+  
     struct pop3 * proxy_pop3 = ATTACHMENT(key);
     if (key->fd == proxy_pop3->client_fd) {
         return &proxy_pop3->client.copy;
@@ -427,6 +440,7 @@ struct copy * copy_ptr(struct selector_key * key) {
 }
 
 static void copy_init(const unsigned state, struct selector_key *key){
+
     struct copy *c = &ATTACHMENT(key) -> client.copy;
 
     c->fd = &ATTACHMENT(key)->client_fd;
