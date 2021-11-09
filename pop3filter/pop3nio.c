@@ -228,3 +228,8 @@ static void pop3_done(struct selector_key *key) {
     }
 }
 
+static void hello_init(const unsigned state, struct selector_key *key){
+    //struct hello_st *h = &ATTACHMENT(key) -> client.hello;
+
+}
+
