@@ -17,14 +17,14 @@
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
-typedef struct copy
+struct copy
 {
 
     int *fd;
-    struct buffer *read_b,*write_b;
+    buffer *read_b,*write_b;
     struct copy *other;
     fd_interest duplex;
-}copy;
+};
 
 
 
@@ -36,8 +36,8 @@ struct pop3 {
     /** maquinas de estados */
     struct state_machine stm;
 
-    struct buffer * read_buffer;
-    struct buffer * write_buffer;
+    struct buffer  read_buffer;
+    struct buffer  write_buffer;
 
     /** estados para el client_fd */
     union {
@@ -173,7 +173,7 @@ static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info or
     memset(new_pop3, 0, sizeof(struct pop3));
     new_pop3->client_fd = client_fd;
     new_pop3->origin_fd = -1;
-    new_pop3->read_buffer = buffer_init(buffer_size);
+    new_pop3->read_buffer = *buffer_init(buffer_size);
     new_pop3->origin_addr_data = origin_addr_data;
 
     new_pop3->stm.initial = RESOLVING;
@@ -432,11 +432,13 @@ static unsigned connection_code(struct selector_key * key) {
 
 struct copy * copy_ptr(struct selector_key * key) {
   
-    struct pop3 * proxy_pop3 = ATTACHMENT(key);
-    if (key->fd == proxy_pop3->client_fd) {
-        return &proxy_pop3->client.copy;
+    struct copy * c = &ATTACHMENT(key)->client.copy;
+    if (*c->fd == key->fd) {
+        //ok
+    }else{
+        c = c->other;
     }
-    return &proxy_pop3->orig.copy;
+    return c;
 }
 
 static void copy_init(const unsigned state, struct selector_key *key){
@@ -444,16 +446,16 @@ static void copy_init(const unsigned state, struct selector_key *key){
     struct copy *c = &ATTACHMENT(key) -> client.copy;
 
     c->fd = &ATTACHMENT(key)->client_fd;
-    c->read_b = ATTACHMENT(key)->read_buffer; //juan lo tiene con &
-    c->write_b = ATTACHMENT(key)->write_buffer;
+    c->read_b = &ATTACHMENT(key)->read_buffer; 
+    c->write_b = &ATTACHMENT(key)->write_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->orig.copy;
 
     c = &ATTACHMENT(key)->orig.copy;
 
     c->fd = &ATTACHMENT(key)->origin_fd;
-    c->read_b = ATTACHMENT(key)->write_buffer;
-    c->write_b = ATTACHMENT(key)->read_buffer;
+    c->read_b = &ATTACHMENT(key)->write_buffer;
+    c->write_b = &ATTACHMENT(key)->read_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->client.copy;
     
@@ -479,13 +481,13 @@ static fd_interest copy_interest(fd_selector s, struct copy *c){
 }
 
 static unsigned copy_r(struct selector_key *key){
-    struct copy *c = copy_ptr(key); //ver q es esto?
+    struct copy *c = copy_ptr(key); 
 
     assert(*c->fd == key->fd);
     size_t size;
     ssize_t n;
     buffer *b = c->read_b;
-    unsigned ret = COPY; //ESTADO DE RETORNO?
+    unsigned ret = COPY; 
 
     uint8_t *ptr = buffer_write_ptr(b,&size);
     n = recv(key->fd,ptr,size,0);
