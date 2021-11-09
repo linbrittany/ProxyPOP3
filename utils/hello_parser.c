@@ -31,7 +31,7 @@ extern enum hello_state hello_parser_feed(struct hello_parser *p, const uint8_t 
             }
             break;
         case hello_crlf:
-            if (b == crlf_message) {
+            if (b == crlf_message[1]) {
                 p->state = hello_done;
             }
             else {
