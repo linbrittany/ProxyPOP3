@@ -47,6 +47,11 @@ static void *resolv_blocking(void * data );
 static unsigned resolv_done(struct selector_key* key);
 static unsigned connecting(fd_selector s, struct pop3 * proxy);
 static unsigned connection_done(struct selector_key * key);
+static unsigned copy_w(struct selector_key *key);
+static unsigned copy_r(struct selector_key *key);
+static fd_interest copy_interest(fd_selector s, struct copy *c);
+static void copy_init(const unsigned state, struct selector_key *key);
+struct copy * copy_ptr(struct selector_key * key) ;
 
 static const struct fd_handler pop3_handler = {
     .handle_read   = pop3_read,
@@ -65,10 +70,14 @@ static const struct state_definition client_state_def[] = {
         .on_write_ready = connection_done,
     }, {
         .state = HELLO,
+        .on_read_ready = NULL,
     }, {
         .state = CHECK_CAPABILITIES,
     }, {
         .state = COPY,
+        .on_arrival = copy_init,
+        .on_read_ready = copy_r,
+        .on_write_ready = copy_w,
     }, {
         .state = SEND_ERROR_MSG,
     }, {
@@ -124,7 +133,58 @@ struct pop3 {
     struct pop3 * next;
 };
 
+//POP3 NEW AND DESTROY
+
+ /** realmente destruye */
+static void pop3_destroy_(struct pop3* s) {
+    if(s->origin_resolution != NULL) {
+        freeaddrinfo(s->origin_resolution);
+        s->origin_resolution = 0;
+    }
+    free(s);
+}
+
+/**
+ * destruye un 'struct pop3', tiene en cuenta las referencias
+ * y el pool de objetos.
+ */
+static void pop3_destroy(struct pop3 *s) {
+    if(s == NULL) {
+        // nada para hacer
+    } else if(s->references == 1) {
+        if(s != NULL) {
+//             if(pool_size < max_pool) {
+//                 s->next = pool;
+//                 pool    = s;
+//                 pool_size++;
+//             } else {
+//                 pop3_destroy_(s);
+//             }
+            pop3_destroy_(s);
+        }
+    } else {
+        s->references -= 1;
+    }
+}
+
+static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info origin_addr_data) {
+
+    struct pop3 * new_pop3 = malloc(sizeof(struct pop3));
+    memset(new_pop3, 0, sizeof(struct pop3));
+    new_pop3->client_fd = client_fd;
+    new_pop3->origin_fd = -1;
+    new_pop3->read_buffer = buffer_init(buffer_size);
+    new_pop3->origin_addr_data = origin_addr_data;
+
+    new_pop3->stm.initial = RESOLVING;
+    new_pop3->stm.max_state = ERROR;
+    new_pop3->stm.states = client_state_def;
+    stm_init(&new_pop3->stm);
+    return new_pop3;
+}
+
 void pop3_passive_accept(struct selector_key *key) {
+ 
     struct sockaddr_storage client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     address_info * origin_addr_data = (address_info *) key->data;
@@ -217,55 +277,6 @@ static void *resolv_blocking(void * data) {
     return 0;
 }
 
-//POP3
-
- /** realmente destruye */
-static void pop3_destroy_(struct pop3* s) {
-    if(s->origin_resolution != NULL) {
-        freeaddrinfo(s->origin_resolution);
-        s->origin_resolution = 0;
-    }
-    free(s);
-}
-
-/**
- * destruye un  `struct pop3', tiene en cuenta las referencias
- * y el pool de objetos.
- */
-static void pop3_destroy(struct pop3 *s) {
-    if(s == NULL) {
-        // nada para hacer
-    } else if(s->references == 1) {
-        if(s != NULL) {
-//             if(pool_size < max_pool) {
-//                 s->next = pool;
-//                 pool    = s;
-//                 pool_size++;
-//             } else {
-//                 pop3_destroy_(s);
-//             }
-            pop3_destroy_(s);
-        }
-    } else {
-        s->references -= 1;
-    }
-}
-
-static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info origin_addr_data) {
-    struct pop3 * new_pop3 = malloc(sizeof(struct pop3));
-    memset(new_pop3, 0, sizeof(struct pop3));
-    new_pop3->client_fd = client_fd;
-    new_pop3->origin_fd = -1;
-    new_pop3->read_buffer = buffer_init(buffer_size);
-    new_pop3->origin_addr_data = origin_addr_data;
-
-    new_pop3->stm.initial = RESOLVING;
-    new_pop3->stm.max_state = ERROR;
-    new_pop3->stm.states = client_state_def;
-    stm_init(&new_pop3->stm);
-    return new_pop3;
-}
-
 // Handlers top level de la conexion pasiva.
 // son los que emiten los eventos a la maquina de estados.
 static void pop3_done(struct selector_key* key);
@@ -321,6 +332,7 @@ static void pop3_done(struct selector_key *key) {
  * Procesa el resultado de la resolución de nombres. 
  */
 static unsigned resolv_done(struct selector_key* key) {
+    
     struct pop3 * proxy = ATTACHMENT(key);
     if(proxy->origin_resolution != 0) {
         proxy->origin_addr_data.domain = proxy->origin_resolution->ai_family;
@@ -344,8 +356,9 @@ static unsigned resolv_done(struct selector_key* key) {
  * Intenta establecer una conexión con el origin server. 
  */
 static unsigned connecting(fd_selector s, struct pop3 * proxy) {
+   
     address_info originAddrData = proxy->origin_addr_data;
-    
+
     proxy->origin_fd = socket(originAddrData.domain, SOCK_STREAM, IPPROTO_TCP);
 
     if(proxy->origin_fd == -1)
@@ -377,7 +390,7 @@ static unsigned connecting(fd_selector s, struct pop3 * proxy) {
          */
         // logError("Problem: connected to origin server without wait. Client Address: %s", proxy->session.clientString);
     }
-    
+
     return CONNECTING;
 
 finally:    
@@ -396,45 +409,53 @@ static unsigned connection_done(struct selector_key * key) {
     int error = -1;
     socklen_t len = sizeof(error);
 
-    if ((error = getsockopt(key->fd, SOL_SOCKET, SO_ERROR, &error, &len)) >= 0) {
+
+
+    if ((error = getsockopt(key->fd, SOL_SOCKET, SO_ERROR, &error, &len)) < 0) {
+
         if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy_pop3->client_fd, OP_WRITE)) { //Setear cliente para escritura
             return SEND_ERROR_MSG;
         }
         return ERROR;
     }
     else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) {
-        return HELLO;
+
+        return COPY;
     }
     return ERROR;
+
+     
 }
 
 //HELLO
 
 
 
-/*
+
 struct copy * copy_ptr(struct selector_key * key) {
+  
     struct pop3 * proxy_pop3 = ATTACHMENT(key);
     if (key->fd == proxy_pop3->client_fd) {
         return &proxy_pop3->client.copy;
     }
-    return &proxy_pop3->orig.copy;
+    return &proxy_pop3->origin.copy;
 }
 
 static void copy_init(const unsigned state, struct selector_key *key){
+
     struct copy *c = &ATTACHMENT(key) -> client.copy;
 
     c->fd = &ATTACHMENT(key)->client_fd;
-    c->read_b = &ATTACHMENT(key)->read_buffer;
-    c->write_b = &ATTACHMENT(key)->write_buffer;
+    c->read_b = ATTACHMENT(key)->read_buffer; //juan lo tiene con &
+    c->write_b = ATTACHMENT(key)->write_buffer;
     c->duplex = OP_READ | OP_WRITE;
-    c->other = &ATTACHMENT(key)->orig.copy;
+    c->other = &ATTACHMENT(key)->origin.copy;
 
-    c = &ATTACHMENT(key)->orig.copy;
+    c = &ATTACHMENT(key)->origin.copy;
 
     c->fd = &ATTACHMENT(key)->origin_fd;
-    c->read_b = &ATTACHMENT(key)->write_buffer;
-    c->write_b = &ATTACHMENT(key)->read_buffer;
+    c->read_b = ATTACHMENT(key)->write_buffer;
+    c->write_b = ATTACHMENT(key)->read_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->client.copy;
     
@@ -494,7 +515,7 @@ static unsigned copy_r(struct selector_key *key){
 
 
 static unsigned copy_w(struct selector_key *key){
-    struct copy *c = copy_ptr(key); //ver q es esto?
+    struct copy *c = copy_ptr(key); 
 
     assert(*c->fd == key->fd);
     size_t size;
@@ -512,7 +533,7 @@ static unsigned copy_w(struct selector_key *key){
             c->other->duplex &= -OP_READ;
         }
     }else{
-        buffer_write_adv(c,n);
+        buffer_write_adv(b,n);
     }
     copy_interest(key->s,c);
     copy_interest(key->s,c->other);
@@ -522,5 +543,3 @@ static unsigned copy_w(struct selector_key *key){
 
     return ret;
 }
-*/
-
