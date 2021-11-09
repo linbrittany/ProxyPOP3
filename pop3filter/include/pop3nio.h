@@ -1,6 +1,18 @@
 #ifndef POP3_NIO_H
 #define POP3_NIO_H
 
+#include <buffer.h>
+
+
+typedef struct hello_st
+{
+
+    int *fd;
+    buffer *client_b;
+}hello_st;
+
+
+
 struct proxy_args {
     size_t buffer_size;
     char *stderr_file_path;
@@ -10,16 +22,9 @@ struct proxy_args {
 
     union 
     {
-        struct hello_st hello;
+        hello_st hello;
     } client;
     
-};
-
-struct hello_st
-{
-
-    int *fd;
-    buffer *client_b;
 };
 
 

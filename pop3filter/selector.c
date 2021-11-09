@@ -131,8 +131,8 @@ struct fdselector {
     // almacenamos en una jump table donde la entrada es el file descriptor.
     // Asumimos que el espacio de file descriptors no va a ser esparso; pero
     // esto podría mejorarse utilizando otra estructura de datos
-    struct item    *fds;
-    size_t          fd_size;  // cantidad de elementos posibles de fds
+    struct item *fds;
+    size_t fd_size;  // cantidad de elementos posibles de fds
 
     /** fd maximo para usar en select() */
     int max_fd;  // max(.fds[].fd)
@@ -140,7 +140,7 @@ struct fdselector {
     /** descriptores prototipicos ser usados en select */
     fd_set master_r, master_w;
     /** para ser usado en el select() (recordar que select cambia el valor) */
-    fd_set  slave_r,  slave_w;
+    fd_set slave_r, slave_w;
 
     /** timeout prototipico para usar en select() */
     struct timespec master_t;
@@ -148,14 +148,14 @@ struct fdselector {
     struct timespec slave_t;
 
     // notificaciónes entre blocking jobs y el selector
-    volatile pthread_t      selector_thread;
+    volatile pthread_t selector_thread;
     /** protege el acceso a resolutions jobs */
-    pthread_mutex_t         resolution_mutex;
+    pthread_mutex_t resolution_mutex;
     /**
      * lista de trabajos blockeantes que finalizaron y que pueden ser
      * notificados.
      */
-    struct blocking_job    *resolution_jobs;
+    struct blocking_job *resolution_jobs;
 };
 
 /** cantidad máxima de file descriptors que la plataforma puede manejar */
