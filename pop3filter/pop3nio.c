@@ -76,6 +76,19 @@ static const struct state_definition client_state_def[] = {
     }
 };
 
+
+typedef struct copy
+{
+
+    int *fd;
+    buffer *read_b,*write_b;
+    struct copy *other;
+    fd_interest duplex;
+}copy;
+
+
+
+
 struct pop3 {
     int client_fd;
     int origin_fd;
@@ -393,7 +406,17 @@ static unsigned connection_code(struct selector_key * key) {
 }
 
 
+
 /*
+
+struct copy * copy_ptr(struct selector_key * key) {
+    struct pop3 * proxy_pop3 = ATTACHMENT(key);
+    if (key->fd == proxy_pop3->client_fd) {
+        return proxy_pop3->client.copy;
+    }
+    return proxy_pop3->origin.copy;
+}
+
 static void copy_init(const unsigned state, struct selector_key *key){
     struct copy *c = &ATTACHMENT(key) -> client.copy;
 
@@ -412,6 +435,51 @@ static void copy_init(const unsigned state, struct selector_key *key){
     c->other = &ATTACHMENT(key)->client.copy;
     
 
+}
+
+
+static fd_interest copy_interest(fd_selector s, struct copy *c){
+    fd_interest ret = OP_NOOP;
+    if((c->duplex & OP_READ) && buffer_can_write(c->read_b)){
+        ret |= OP_READ; //me subscribo si tengo lugar en el buffer 
+    }
+
+    if((c->duplex & OP_WRITE) && buffer_can_read(c->write_b)){
+        ret |= OP_WRITE;
+    }
+    if(SELECTOR_SUCCESS != selector_set_interest(s,*c->fd,ret)){
+        abort(); //TODO mensaje de error?
+    }
+
+    return ret;
+
+}
+
+static unsigned copy_r(struct selector_key *key){
+    struct copy *c = copy_ptr(key); //ver q es esto?
+
+    assert(*c->fd == key->fd);
+    size_t size;
+    ssize_t n;
+    buffer *b = c->read_b;
+    unsigned ret = COPY; //ESTADO DE RETORNO?
+
+    uint8_t *ptr = buffer_write_ptr(b,&size);
+    n = recv(key->fd,ptr,size,0);
+
+    if(n<=0){
+
+    }else{
+        buffer_write_adv(b,n); 
+    }
+
+    copy_interest(key->s,c);
+    copy_interest(key->s,c->other);
+    if(c->duplex == OP_NOOP){
+        ret = DONE;
+    }
+
+    return ret;
 }
 */
 

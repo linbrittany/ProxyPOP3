@@ -4,15 +4,6 @@
 #include <buffer.h>
 
 
-typedef struct copy
-{
-
-    int *fd;
-    buffer *client_b,*origin_b;
-    struct copy *other;
-}copy;
-
-
 
 struct proxy_args {
     size_t buffer_size;
