@@ -13,7 +13,8 @@
 #include "stm.h"
 #include "pop3nio.h"
 #include "buffer.h"
-#include "../utils/include/netutils.h"
+#include "netutils.h"
+#include "hello_parser.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
@@ -55,7 +56,7 @@ struct pop3 {
      union {
         //struct connecting conn;
         struct copy copy;
-     } orig;
+     } origin;
 
     address_info origin_addr_data;
 
@@ -92,11 +93,12 @@ static void pop3_read   (struct selector_key *key);
 static void pop3_write  (struct selector_key *key);
 static void pop3_block  (struct selector_key *key);
 static void pop3_close  (struct selector_key *key);
+
 static void *resolv_blocking(void * data );
 static unsigned resolv_done(struct selector_key* key);
 static unsigned write_error_msg(struct selector_key * key);
-
-static unsigned connection_code(struct selector_key * key);
+static unsigned connecting(fd_selector s, struct pop3 * proxy);
+static unsigned connection_done(struct selector_key * key);
 static unsigned copy_w(struct selector_key *key);
 static unsigned copy_r(struct selector_key *key);
 static fd_interest copy_interest(fd_selector s, struct copy *c);
@@ -117,7 +119,7 @@ static const struct state_definition client_state_def[] = {
         .on_block_ready = resolv_done, 
     }, {
         .state = CONNECTING,
-        .on_write_ready = connection_code,
+        .on_write_ready = connection_done,
     }, {
         .state = HELLO,
         .on_read_ready = NULL,
@@ -139,9 +141,12 @@ static const struct state_definition client_state_def[] = {
 };
 
 
+typedef struct hello_st {
+    struct buffer * write_buffer;
+    struct hello_parser parser;
+} hello_st;
 
-
-static unsigned connecting(fd_selector s, struct pop3 * proxy);
+//POP3 NEW AND DESTROY
 
  /** realmente destruye */
 static void pop3_destroy_(struct pop3* s) {
@@ -153,7 +158,7 @@ static void pop3_destroy_(struct pop3* s) {
 }
 
 /**
- * destruye un  `struct pop3', tiene en cuenta las referencias
+ * destruye un 'struct pop3', tiene en cuenta las referencias
  * y el pool de objetos.
  */
 static void pop3_destroy(struct pop3 *s) {
@@ -216,9 +221,10 @@ void pop3_passive_accept(struct selector_key *key) {
     // memcpy(&state->client_addr, &client_addr, client_addr_len);
     // state->client_addr_len = client_addr_len;
 
-    if(SELECTOR_SUCCESS != selector_register(key->s, client, &pop3_handler, OP_READ, state)) {
+    if(SELECTOR_SUCCESS != selector_register(key->s, client, &pop3_handler, OP_NOOP, state)) {
         goto fail;
     }
+    
     if(origin_addr_data->type != ADDR_DOMAIN) 
         state->stm.initial = connecting(key->s, state);
     else {
@@ -258,7 +264,7 @@ fail:
  * Una vez resuelto notifica al selector para que el evento esté
  * disponible en la próxima iteración.
  */
-static void *resolv_blocking(void * data ) {
+static void *resolv_blocking(void * data) {
     struct selector_key* key = (struct selector_key * ) data;
     struct pop3 *proxy = ATTACHMENT(key);
 
@@ -276,14 +282,65 @@ static void *resolv_blocking(void * data ) {
     };
 
     char buff[7];
-    snprintf(buff, sizeof(buff),"%d", proxy->origin_addr_data.port);
-    getaddrinfo(proxy->origin_addr_data.addr.fqdn,buff,&hints,&proxy->origin_resolution);
-    selector_notify_block(key->s,key->fd);
+    snprintf(buff, sizeof(buff), "%d", proxy->origin_addr_data.port);
+    getaddrinfo(proxy->origin_addr_data.addr.fqdn, buff, &hints, &proxy->origin_resolution);
+    selector_notify_block(key->s, key->fd);
 
     free(data);
     return 0;
 }
 
+// Handlers top level de la conexion pasiva.
+// son los que emiten los eventos a la maquina de estados.
+static void pop3_done(struct selector_key* key);
+
+static void pop3_read(struct selector_key *key) {
+    struct state_machine *stm   = &ATTACHMENT(key)->stm;
+    const enum pop3state st = stm_handler_read(stm, key);
+
+    if(ERROR == st || DONE == st) {
+        pop3_done(key);
+    }
+}
+
+static void pop3_write(struct selector_key *key) {
+    struct state_machine *stm = &ATTACHMENT(key)->stm;
+    const enum pop3state st = stm_handler_write(stm, key);
+
+    if(ERROR == st || DONE == st) {
+        pop3_done(key);
+    }
+}
+
+static void pop3_block(struct selector_key *key) {
+    struct state_machine *stm   = &ATTACHMENT(key)->stm;
+    const enum pop3state st = stm_handler_block(stm, key);
+
+    if(ERROR == st || DONE == st) {
+        pop3_done(key);
+    }
+}
+
+static void pop3_close(struct selector_key *key) {
+    pop3_destroy(ATTACHMENT(key));
+}
+
+static void pop3_done(struct selector_key *key) {
+    const int fds[] = {
+        ATTACHMENT(key)->client_fd,
+        ATTACHMENT(key)->origin_fd,
+    };
+    for(unsigned i = 0; i < N(fds); i++) {
+        if(fds[i] != -1) {
+            if(SELECTOR_SUCCESS != selector_unregister_fd(key->s, fds[i])) {
+                abort();
+            }
+            close(fds[i]);
+        }
+    }
+}
+
+//RESOLVING
 /**
  * Procesa el resultado de la resolución de nombres. 
  */
@@ -358,61 +415,9 @@ finally:
 }
 
 
-
-// Handlers top level de la conexion pasiva.
-// son los que emiten los eventos a la maquina de estados.
-static void pop3_done(struct selector_key* key);
-
-static void pop3_read(struct selector_key *key) {
-    struct state_machine *stm   = &ATTACHMENT(key)->stm;
-    const enum pop3state st = stm_handler_read(stm, key);
-
-    if(ERROR == st || DONE == st) {
-        pop3_done(key);
-    }
-}
-
-static void pop3_write(struct selector_key *key) {
-    struct state_machine *stm = &ATTACHMENT(key)->stm;
-    const enum pop3state st = stm_handler_write(stm, key);
-
-    if(ERROR == st || DONE == st) {
-        pop3_done(key);
-    }
-}
-
-static void pop3_block(struct selector_key *key) {
-    struct state_machine *stm   = &ATTACHMENT(key)->stm;
-    const enum pop3state st = stm_handler_block(stm, key);
-
-    if(ERROR == st || DONE == st) {
-        pop3_done(key);
-    }
-}
-
-static void pop3_close(struct selector_key *key) {
-    pop3_destroy(ATTACHMENT(key));
-}
-
-static void pop3_done(struct selector_key *key) {
-    const int fds[] = {
-        ATTACHMENT(key)->client_fd,
-        ATTACHMENT(key)->origin_fd,
-    };
-    for(unsigned i = 0; i < N(fds); i++) {
-        if(fds[i] != -1) {
-            if(SELECTOR_SUCCESS != selector_unregister_fd(key->s, fds[i])) {
-                abort();
-            }
-            close(fds[i]);
-        }
-    }
-}
-
 //CONNECTING
 
-static unsigned connection_code(struct selector_key * key) {
-
+static unsigned connection_done(struct selector_key * key) {
     struct pop3 * proxy_pop3 = ATTACHMENT(key);
     int error = -1;
     socklen_t len = sizeof(error);
@@ -435,6 +440,8 @@ static unsigned connection_code(struct selector_key * key) {
      
 }
 
+//HELLO
+
 
 // COPY
 
@@ -444,7 +451,7 @@ struct copy * copy_ptr(struct selector_key * key) {
     if (key->fd == proxy_pop3->client_fd) {
         return &proxy_pop3->client.copy;
     }
-    return &proxy_pop3->orig.copy;
+    return &proxy_pop3->origin.copy;
 }
 
 static void copy_init(const unsigned state, struct selector_key *key){
@@ -455,9 +462,9 @@ static void copy_init(const unsigned state, struct selector_key *key){
     c->read_b = ATTACHMENT(key)->read_buffer; //juan lo tiene con &
     c->write_b = ATTACHMENT(key)->write_buffer;
     c->duplex = OP_READ | OP_WRITE;
-    c->other = &ATTACHMENT(key)->orig.copy;
+    c->other = &ATTACHMENT(key)->origin.copy;
 
-    c = &ATTACHMENT(key)->orig.copy;
+    c = &ATTACHMENT(key)->origin.copy;
 
     c->fd = &ATTACHMENT(key)->origin_fd;
     c->read_b = ATTACHMENT(key)->write_buffer;
