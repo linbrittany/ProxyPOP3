@@ -408,13 +408,12 @@ static unsigned connection_code(struct selector_key * key) {
 
 
 /*
-
 struct copy * copy_ptr(struct selector_key * key) {
     struct pop3 * proxy_pop3 = ATTACHMENT(key);
     if (key->fd == proxy_pop3->client_fd) {
-        return proxy_pop3->client.copy;
+        return &proxy_pop3->client.copy;
     }
-    return proxy_pop3->origin.copy;
+    return &proxy_pop3->orig.copy;
 }
 
 static void copy_init(const unsigned state, struct selector_key *key){
@@ -468,6 +467,12 @@ static unsigned copy_r(struct selector_key *key){
     n = recv(key->fd,ptr,size,0);
 
     if(n<=0){
+        shutdown(*c->fd,SHUT_RD);
+        c->duplex &= -OP_WRITE;
+        if(*c->other->fd!=-1){
+            shutdown(*c->other->fd,SHUT_WR);
+            c->other->duplex &= -OP_WRITE;
+        }
 
     }else{
         buffer_write_adv(b,n); 
@@ -481,6 +486,36 @@ static unsigned copy_r(struct selector_key *key){
 
     return ret;
 }
-*/
 
+
+static unsigned copy_w(struct selector_key *key){
+    struct copy *c = copy_ptr(key); //ver q es esto?
+
+    assert(*c->fd == key->fd);
+    size_t size;
+    ssize_t n;
+    buffer *b = c->write_b;
+    unsigned ret = COPY; //ESTADO DE RETORNO?
+
+    uint8_t *ptr = buffer_read_ptr(b,&size);
+    n = send(key->fd,ptr,size,MSG_NOSIGNAL);
+    if(n==-1){
+        shutdown(*c->fd,SHUT_WR);
+        c->duplex &= -OP_WRITE;
+        if(*c->other->fd!=-1){
+            shutdown(*c->other->fd,SHUT_RD);
+            c->other->duplex &= -OP_READ;
+        }
+    }else{
+        buffer_write_adv(c,n);
+    }
+    copy_interest(key->s,c);
+    copy_interest(key->s,c->other);
+    if(c->duplex == OP_NOOP){ //SE CERRARON LOS DOS 
+        ret = DONE;
+    }
+
+    return ret;
+}
+*/
 
