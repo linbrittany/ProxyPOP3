@@ -45,8 +45,8 @@ struct pop3 {
     /** maquinas de estados */
     struct state_machine stm;
 
-    struct buffer  read_buffer;
-    struct buffer  write_buffer;
+    struct buffer * read_buffer;
+    struct buffer * write_buffer;
     
     error_container error_sender;
 
@@ -182,7 +182,8 @@ static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info or
     memset(new_pop3, 0, sizeof(struct pop3));
     new_pop3->client_fd = client_fd;
     new_pop3->origin_fd = -1;
-    new_pop3->read_buffer = *buffer_init(buffer_size);
+    new_pop3->read_buffer = buffer_init(buffer_size);
+    new_pop3->write_buffer = buffer_init(buffer_size);
     new_pop3->origin_addr_data = origin_addr_data;
 
     new_pop3->stm.initial = RESOLVING;
@@ -453,18 +454,24 @@ static void copy_init(const unsigned state, struct selector_key *key){
     struct copy *c = &ATTACHMENT(key) -> client.copy;
 
     c->fd = &ATTACHMENT(key)->client_fd;
-    c->read_b = &ATTACHMENT(key)->read_buffer; 
-    c->write_b = &ATTACHMENT(key)->write_buffer;
+    c->read_b = ATTACHMENT(key)->write_buffer; 
+    c->write_b = ATTACHMENT(key)->read_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->origin.copy;
 
+    
     c = &ATTACHMENT(key)->origin.copy;
 
+    
     c->fd = &ATTACHMENT(key)->origin_fd;
-    c->read_b = &ATTACHMENT(key)->write_buffer;
-    c->write_b = &ATTACHMENT(key)->read_buffer;
+    c->read_b = ATTACHMENT(key)->read_buffer;
+    c->write_b = ATTACHMENT(key)->write_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->client.copy;
+    
+
+
+
 
 }
 
@@ -495,6 +502,7 @@ static unsigned copy_r(struct selector_key *key){
 
     uint8_t *ptr = buffer_write_ptr(b,&size);
     n = recv(key->fd,ptr,size,0);
+   
     if(n<=0){
         shutdown(*c->fd,SHUT_RD);
         c->duplex &= -OP_WRITE;
@@ -505,9 +513,11 @@ static unsigned copy_r(struct selector_key *key){
 
     }else{
         buffer_write_adv(b,n); 
+
     }
 
     copy_interest(key->s,c);
+    printf("HOLA");
     copy_interest(key->s,c->other);
     if(c->duplex == OP_NOOP){
         ret = DONE;
@@ -518,8 +528,9 @@ static unsigned copy_r(struct selector_key *key){
 
 
 static unsigned copy_w(struct selector_key *key){
+    
     struct copy *c = copy_ptr(key); 
-
+    printf("COPY_W");
     assert(*c->fd == key->fd);
     size_t size;
     ssize_t n;
@@ -536,7 +547,7 @@ static unsigned copy_w(struct selector_key *key){
             c->other->duplex &= -OP_READ;
         }
     }else{
-        buffer_write_adv(b,n);
+        buffer_read_adv(b,n);
     }
     copy_interest(key->s,c);
     copy_interest(key->s,c->other);
