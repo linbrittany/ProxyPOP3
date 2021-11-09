@@ -21,11 +21,7 @@
 struct copy
 {
     int *fd;
-<<<<<<< HEAD
     buffer *read_b,*write_b;
-=======
-    buffer *read_b, *write_b;
->>>>>>> 719dca1ad4dcb3bd387a8bed90adbb58b82b4341
     struct copy *other;
     fd_interest duplex;
 };
@@ -51,11 +47,8 @@ struct pop3 {
 
     struct buffer  read_buffer;
     struct buffer  write_buffer;
-<<<<<<< HEAD
-=======
     
     error_container error_sender;
->>>>>>> 719dca1ad4dcb3bd387a8bed90adbb58b82b4341
 
     /** estados para el client_fd */
     union {
