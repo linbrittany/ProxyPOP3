@@ -52,12 +52,12 @@ struct pop3 {
 
     /** estados para el client_fd */
     union {
-        struct hello_st hello;
         //struct request_st request;
         struct copy copy;
      } client;
     /** estados para el origin_fd */
      union {
+         struct hello_st hello;
         //struct connecting conn;
         struct copy copy;
      } origin;
@@ -103,6 +103,9 @@ static unsigned resolv_done(struct selector_key* key);
 static unsigned write_error_msg(struct selector_key * key);
 static unsigned connecting(fd_selector s, struct pop3 * proxy);
 static unsigned connection_done(struct selector_key * key);
+static void hello_init(const unsigned state, struct selector_key * key);
+static unsigned hello_read(struct selector_key * key);
+static unsigned hello_write(struct selector_key * key);
 static unsigned copy_w(struct selector_key *key);
 static unsigned copy_r(struct selector_key *key);
 static fd_interest copy_interest(fd_selector s, struct copy *c);
@@ -126,7 +129,9 @@ static const struct state_definition client_state_def[] = {
         .on_write_ready = connection_done,
     }, {
         .state = HELLO,
-        .on_read_ready = NULL,
+        .on_arrival = hello_init,
+        .on_read_ready = hello_read,
+        .on_write_ready = hello_write,
     }, {
         .state = CHECK_CAPABILITIES,
     }, {
@@ -426,15 +431,82 @@ static unsigned connection_done(struct selector_key * key) {
         }
         return ERROR;
     }
-    else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) {
+    else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
 
-        return COPY;
+        return HELLO;
     }
     return ERROR;     
 }
 
 //HELLO
 
+static void hello_init(const unsigned state, struct selector_key * key) {
+    struct pop3 * proxy = ATTACHMENT(key);
+    struct hello_st * hello = &proxy->origin.hello;
+    hello_parser_init(&hello->parser);
+    hello->write_buffer = proxy->write_buffer;
+}
+
+static unsigned hello_read(struct selector_key * key) {
+    printf("hello read\n");
+    struct pop3 * proxy = ATTACHMENT(key);
+    struct hello_st * hello = &proxy->origin.hello;
+    struct buffer * buff = hello->write_buffer;
+    bool error = false;
+    size_t len;
+    uint8_t * write_ptr = buffer_write_ptr(buff, &len);
+    ssize_t n = recv(key->fd, write_ptr, len, 0);
+    if (n > 0) {
+        buffer_write_adv(buff, n);
+        hello_consume(buff, &hello->parser, &error);
+        if (!error && SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_NOOP) &&
+                SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_WRITE)) {
+            return HELLO;
+        }
+        else {
+            error = true;
+        }
+    }
+    else {
+        shutdown(key->fd, SHUT_RD);
+        error = true;
+    }
+    if (error) {
+        proxy->error_sender.message = "-ERR\r\n";
+        if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_WRITE)) {
+            return SEND_ERROR_MSG;
+        }
+        return ERROR;
+    }
+    return HELLO;
+}
+
+static unsigned hello_write(struct selector_key * key) {
+    struct pop3 * proxy = ATTACHMENT(key);
+    struct hello_st * hello = &proxy->origin.hello;
+    struct buffer * buff = hello->write_buffer;
+    size_t len;
+    uint8_t * read_ptr = buffer_read_ptr(buff, &len);
+    ssize_t n = send(key->fd, read_ptr, len, 0);
+    if (n == -1) {
+        shutdown(key->fd, SHUT_WR);
+        return ERROR;
+    }
+    else {
+        if (hello_is_done(hello->parser.state, 0)) {
+            if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_WRITE) &&
+               SELECTOR_SUCCESS == selector_set_interest_key(key, OP_NOOP))
+                return COPY;
+            else
+                return ERROR; 
+        }
+        if (!buffer_can_read(buff) && SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_READ) &&
+                SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_NOOP)) {
+            return HELLO;
+        }
+    }
+    return ERROR;
+}
 
 // COPY
 
@@ -458,10 +530,8 @@ static void copy_init(const unsigned state, struct selector_key *key){
     c->write_b = ATTACHMENT(key)->read_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->origin.copy;
-
     
     c = &ATTACHMENT(key)->origin.copy;
-
     
     c->fd = &ATTACHMENT(key)->origin_fd;
     c->read_b = ATTACHMENT(key)->read_buffer;
@@ -469,10 +539,6 @@ static void copy_init(const unsigned state, struct selector_key *key){
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->client.copy;
     
-
-
-
-
 }
 
 static fd_interest copy_interest(fd_selector s, struct copy *c){
@@ -513,7 +579,6 @@ static unsigned copy_r(struct selector_key *key){
 
     }else{
         buffer_write_adv(b,n); 
-
     }
 
     copy_interest(key->s,c);
@@ -525,7 +590,6 @@ static unsigned copy_r(struct selector_key *key){
 
     return ret;
 }
-
 
 static unsigned copy_w(struct selector_key *key){
     

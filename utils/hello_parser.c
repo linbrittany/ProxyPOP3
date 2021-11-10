@@ -3,6 +3,8 @@
 
 #include "hello_parser.h"
 
+#define HELLO_MAX_MSG_SIZE 512
+
 static const char * hello_positive_message = "+OK";
 static const size_t hello_positive_message_size = 3;
 
@@ -19,7 +21,7 @@ extern enum hello_state hello_parser_feed(struct hello_parser *p, const uint8_t 
             if(b != hello_positive_message[p->remaining]) {
                 p->state = hello_error;
             } else if (p->remaining == (hello_positive_message_size - 1)){
-                p->state = hello_crlf;
+                p->state = hello_end_message;
             }
             break;
         case hello_end_message:
@@ -46,7 +48,8 @@ extern enum hello_state hello_parser_feed(struct hello_parser *p, const uint8_t 
             fprintf(stderr, "unknown state %d\n", p->state);
             abort();
     }
-
+    if(p->remaining++ == HELLO_MAX_MSG_SIZE)
+        p->state = hello_error;
     return p->state;
 }
 
@@ -77,5 +80,6 @@ extern enum hello_state hello_consume(buffer *b, struct hello_parser *p, bool *e
             break;
         }
     }
+    printf("HELLO CONSUME %d\n", *errored);
     return st;
 }

@@ -18,7 +18,7 @@ struct hello_parser {
     /******** zona privada *****************/
     enum hello_state state;
     /* metodos que faltan por leer */
-    uint8_t remaining;
+    size_t remaining;
 };
 
 /** inicializa el parser */

@@ -61,8 +61,7 @@ inline void buffer_read_adv(buffer *b, const ssize_t bytes) {
     }
 }
 
-inline uint8_t
-buffer_read(buffer *b) {
+inline uint8_t buffer_read(buffer *b) {
     uint8_t ret;
     if(buffer_can_read(b)) {
         ret = *b->read;
@@ -73,8 +72,7 @@ buffer_read(buffer *b) {
     return ret;
 }
 
-inline void
-buffer_write(buffer *b, uint8_t c) {
+inline void buffer_write(buffer *b, uint8_t c) {
     if(buffer_can_write(b)) {
         *b->write = c;
         buffer_write_adv(b, 1);

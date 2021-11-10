@@ -255,8 +255,6 @@ int main(int argc, char const **argv) {
         goto finally;
     }
 
-
-
     for (; !done;) {
         err_msg = NULL;
         ss = selector_select(selector);
