@@ -19,7 +19,6 @@
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 #define MAX_BUFF 4000
-#define VERSION 0
 
 struct filter{
     int                 infd[2];
@@ -147,6 +146,8 @@ static unsigned check_capa_read(struct selector_key *key);
 static unsigned check_capa_write(struct selector_key *key);
 struct copy * copy_ptr(struct selector_key * key) ;
 
+//static void filter_init(const unsigned state, struct selector_key *key);
+//static fd_interest filter_interest(fd_selector s, struct filter *f);
 
 static void check_capa_init(const unsigned state, struct selector_key *key){
     // struct pop3 * proxy = ATTACHMENT(key);
@@ -584,6 +585,7 @@ struct copy * copy_ptr(struct selector_key * key) {
 
 static void copy_init(const unsigned state, struct selector_key *key){
 
+
     struct copy *c = &ATTACHMENT(key) -> client.copy;
 
     c->fd = &ATTACHMENT(key)->client_fd;
@@ -710,15 +712,18 @@ static unsigned write_error_msg(struct selector_key * key) {
 //filter
 
 /*
+
 static void set_variables(struct pop3 * pop3_struct){
 
-    setenv("POP3FILTER_VERSION", VERSION, 1);
+    setenv("POP3FILTER_VERSION", "0.0.0.0", 1);//cambiar la version
     setenv("POP3_SERVER", pop3_struct->origin_addr_data.addr.fqdn, 1);//todo revisar
 }
 
 
 
 static void filter_init(const unsigned state, struct selector_key *key){
+    printf("FILTER_INIT");
+    fflush(stdout);
     enum{
         R=0,
         W=1
@@ -734,7 +739,7 @@ static void filter_init(const unsigned state, struct selector_key *key){
     if(pipe(f->infd)==-1 || pipe(f->outfd) == -1){
         perror("error creating pipes");
         exit(EXIT_FAILURE);
-        return EXIT_FAILURE;
+        return;
     }
 
     const pid_t pid = fork();
@@ -743,7 +748,7 @@ static void filter_init(const unsigned state, struct selector_key *key){
     if(pid == -1){
         perror("creating process");
         exit(EXIT_FAILURE);
-        return EXIT_FAILURE; //todo estado de error?
+        return; //todo estado de error?
     }else if(pid == 0){
         close(f->infd[W]);
         close(f->outfd[R]);
@@ -770,17 +775,22 @@ static void filter_init(const unsigned state, struct selector_key *key){
     }
 
 
+
 }
 
 int fd_select(int fd[2], int n){
+     printf("FD_SELECT");
+    fflush(stdout);
     for(int i = 0; i<2; i++){
         if(fd[i] > n){
             n = fd[i];
         }
-        return n;
+        
     }
+    return n;
 }
 static fd_interest filter_interest(fd_selector s, struct filter *f){
+    
        enum{
         R=0,
         W=1
@@ -796,6 +806,8 @@ static fd_interest filter_interest(fd_selector s, struct filter *f){
     fd_set readfd, writefd;
     FD_ZERO(&readfd); 
     FD_ZERO(&writefd);
+
+   //Hasta aca funciona
     if(f->infd[R]!=-1&& buffer_can_write(f->buff_in)){
         ret |= OP_READ; //me subscribo si tengo lugar en el buffer 
     }
@@ -825,11 +837,11 @@ static fd_interest filter_interest(fd_selector s, struct filter *f){
     }
 
     if(-1 == f->infd[R] && -1 == f->outfd[R] && -1 == f->outfd[W] && -1 == f->infd[W]){
-        return; //?
+        return -1; //?
     }
 
     return ret;
-}
-*/
+}*/
+
 
 
