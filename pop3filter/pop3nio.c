@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <netdb.h>
 #include <sys/socket.h>
+#include <sys/socket.h>
 
 #include "selector.h"
 #include "stm.h"
@@ -17,6 +18,13 @@
 #include "hello_parser.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
+
+struct filter{
+    int                 infd[2];
+    int                 outfd[2];
+    pid_t               pid;
+};
+
 
 struct copy
 {
@@ -76,6 +84,8 @@ struct pop3 {
         struct copy copy;
 
         struct check_capa capa;
+
+        struct filter filter;
      } origin;
 
     address_info origin_addr_data;
@@ -475,7 +485,7 @@ static unsigned connection_done(struct selector_key * key) {
     }
     else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
 
-        return HELLO;
+        return COPY;
     }
     return ERROR;     
 }
@@ -687,3 +697,58 @@ static unsigned write_error_msg(struct selector_key * key) {
     }
     return ret;
 }
+
+//filter
+
+/*
+
+static void filter_init(const unsigned state, struct selector_key *key){
+    enum{
+        R=0,
+        W=1
+    };
+    struct filter *f = &ATTACHMENT(key) -> origin.filter;
+
+    for(int i = 0; i < 2; i++) {
+        f->infd[i]  = -1;
+        f->outfd[i] = -1;
+    }
+    int infd = STDIN_FILENO; // FD entrada
+    int outfd = STDOUT_FILENO; // FD SALIDA
+
+    if(pipe(f->infd)==-1 || pipe(f->outfd) == -1){
+        perror("error creating pipes");
+        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
+    }
+
+    const pid_t pid = fork();
+
+
+    if(pid == -1){
+        perror("creating process");
+        exit(EXIT_FAILURE);
+        return EXIT_FAILURE; //todo estado de error?
+    }else if(pid == 0){
+        close(f->infd[W]);
+        close(f->outfd[R]);
+        f->infd[W] = f->outfd[R] == -1;
+        dup2(f->infd[R],STDIN_FILENO);
+        dup2(f->outfd[W],STDOUT_FILENO);
+
+        //setear variables de entorno
+
+    }else{
+        close(f->infd[R]);
+        close(f->outfd[R]);
+        f->infd[R] = f->outfd[R] = -1;
+    }
+
+
+}
+
+static void set_variables(){
+
+}
+*/
+
