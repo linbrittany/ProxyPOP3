@@ -26,6 +26,20 @@ struct copy
     fd_interest duplex;
 };
 
+
+typedef struct capabilities {
+    //Listado de las capabilities a negociar con origen
+    bool pipelining;
+} capabilities;
+
+
+struct check_capa
+{
+    buffer       *read_b;
+    capabilities *capabilities;
+};
+
+
 typedef struct hello_st {
     struct buffer * write_buffer;
     struct hello_parser parser;
@@ -57,9 +71,11 @@ struct pop3 {
      } client;
     /** estados para el origin_fd */
      union {
-         struct hello_st hello;
+        struct hello_st hello;
         //struct connecting conn;
         struct copy copy;
+
+        struct check_capa capa;
      } origin;
 
     address_info origin_addr_data;
@@ -110,7 +126,27 @@ static unsigned copy_w(struct selector_key *key);
 static unsigned copy_r(struct selector_key *key);
 static fd_interest copy_interest(fd_selector s, struct copy *c);
 static void copy_init(const unsigned state, struct selector_key *key);
+static void check_capa_init(const unsigned state, struct selector_key *key);
+static unsigned check_capa_read(struct selector_key *key);
+static unsigned check_capa_write(struct selector_key *key);
 struct copy * copy_ptr(struct selector_key * key) ;
+
+
+static void check_capa_init(const unsigned state, struct selector_key *key){
+    // struct pop3 * proxy = ATTACHMENT(key);
+}
+static unsigned check_capa_read(struct selector_key *key){
+    // struct pop3 * proxy = ATTACHMENT(key);
+    
+    return 1;
+    }
+static unsigned check_capa_write(struct selector_key *key){
+    // struct pop3 * proxy = ATTACHMENT(key);
+    int n = send(key->fd,"CAPA", 5, MSG_NOSIGNAL);
+    printf("ENVIADOS %d BYTES", n);
+    return 1;
+    }
+
 
 static const struct fd_handler pop3_handler = {
     .handle_read   = pop3_read,
@@ -123,7 +159,7 @@ static const struct fd_handler pop3_handler = {
 static const struct state_definition client_state_def[] = {
     {
         .state = RESOLVING,
-        .on_block_ready = resolv_done, 
+        .on_block_ready = resolv_done,
     }, {
         .state = CONNECTING,
         .on_write_ready = connection_done,
@@ -134,6 +170,10 @@ static const struct state_definition client_state_def[] = {
         .on_write_ready = hello_write,
     }, {
         .state = CHECK_CAPABILITIES,
+        .on_arrival = check_capa_init,
+        .on_read_ready = check_capa_read,
+        .on_write_ready = check_capa_write,
+
     }, {
         .state = COPY,
         .on_arrival = copy_init,
@@ -226,6 +266,8 @@ void pop3_passive_accept(struct selector_key *key) {
     if(SELECTOR_SUCCESS != selector_register(key->s, client, &pop3_handler, OP_READ, state)) {
         goto fail;
     }
+
+
     if(origin_addr_data->type != ADDR_DOMAIN) 
         state->stm.initial = connecting(key->s, state);
     else {
@@ -247,7 +289,7 @@ void pop3_passive_accept(struct selector_key *key) {
         }
     }
 
-    return ;
+    return;
 
     //Crear socket entre proxy y servidor origen y registrarlo para escritura
 fail2:
@@ -478,7 +520,7 @@ static unsigned hello_read(struct selector_key * key) {
         }
         return ERROR;
     }
-    return HELLO;
+    return CHECK_CAPABILITIES;
 }
 
 static unsigned hello_write(struct selector_key * key) {

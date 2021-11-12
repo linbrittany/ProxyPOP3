@@ -1,8 +1,10 @@
+/* strings - errors */
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
+
 #include <stdlib.h>
 #include <limits.h>
-#include <errno.h>
 #include <signal.h>
 #include <unistd.h>
 
