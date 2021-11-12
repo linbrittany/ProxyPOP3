@@ -18,11 +18,17 @@
 #include "hello_parser.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
+#define MAX_BUFF 4000
+#define VERSION 0
 
 struct filter{
     int                 infd[2];
     int                 outfd[2];
     pid_t               pid;
+    //char * command;
+    fd_interest interest;
+    buffer *buff_in,*buff_out;
+    
 };
 
 
@@ -244,6 +250,9 @@ static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info or
     new_pop3->stm.initial = RESOLVING;
     new_pop3->stm.max_state = ERROR;
     new_pop3->stm.states = client_state_def;
+
+    
+
     stm_init(&new_pop3->stm);
     return new_pop3;
 }
@@ -485,7 +494,7 @@ static unsigned connection_done(struct selector_key * key) {
     }
     else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
 
-        return COPY;
+        return HELLO;
     }
     return ERROR;     
 }
@@ -701,6 +710,13 @@ static unsigned write_error_msg(struct selector_key * key) {
 //filter
 
 /*
+static void set_variables(struct pop3 * pop3_struct){
+
+    setenv("POP3FILTER_VERSION", VERSION, 1);
+    setenv("POP3_SERVER", pop3_struct->origin_addr_data.addr.fqdn, 1);//todo revisar
+}
+
+
 
 static void filter_init(const unsigned state, struct selector_key *key){
     enum{
@@ -709,12 +725,11 @@ static void filter_init(const unsigned state, struct selector_key *key){
     };
     struct filter *f = &ATTACHMENT(key) -> origin.filter;
 
+
     for(int i = 0; i < 2; i++) {
         f->infd[i]  = -1;
         f->outfd[i] = -1;
     }
-    int infd = STDIN_FILENO; // FD entrada
-    int outfd = STDOUT_FILENO; // FD SALIDA
 
     if(pipe(f->infd)==-1 || pipe(f->outfd) == -1){
         perror("error creating pipes");
@@ -736,19 +751,85 @@ static void filter_init(const unsigned state, struct selector_key *key){
         dup2(f->infd[R],STDIN_FILENO);
         dup2(f->outfd[W],STDOUT_FILENO);
 
-        //setear variables de entorno
+        set_variables(ATTACHMENT(key));   //setear variables de entorno
+       if(-1 == execl("/bin/sh", "sh", "-c", args.command, (char *) 0)){
+           //llevar a estado de error?
+           perror("executing command");
+           close(f->infd[R]);
+           close(f->outfd[W]);
+       }
 
     }else{
         close(f->infd[R]);
-        close(f->outfd[R]);
+        close(f->outfd[W]);
         f->infd[R] = f->outfd[R] = -1;
+
+        //int fds[] = {infd,outfd,f->infd[W],f->outfd[R]};
+        //serve(fds);
+        f->interest = filter_interest(key->s,f);
     }
 
 
 }
 
-static void set_variables(){
+int fd_select(int fd[2], int n){
+    for(int i = 0; i<2; i++){
+        if(fd[i] > n){
+            n = fd[i];
+        }
+        return n;
+    }
+}
+static fd_interest filter_interest(fd_selector s, struct filter *f){
+       enum{
+        R=0,
+        W=1
+    };
 
+    int nfds = fd_select(f->infd,0);
+    nfds = fd_select(f->outfd,nfds);
+
+    fd_interest ret = OP_NOOP;
+    f->buff_in = buffer_init(MAX_BUFF);
+    f->buff_out = buffer_init(MAX_BUFF);
+
+    fd_set readfd, writefd;
+    FD_ZERO(&readfd); 
+    FD_ZERO(&writefd);
+    if(f->infd[R]!=-1&& buffer_can_write(f->buff_in)){
+        ret |= OP_READ; //me subscribo si tengo lugar en el buffer 
+    }
+
+    if(f->outfd[R]!=-1&& buffer_can_write(f->buff_out)){
+        ret |= OP_READ;
+    }
+    if(f->outfd[W]!=-1&& buffer_can_read(f->buff_in)){
+        ret |= OP_WRITE;
+    }
+    if(f->infd[W]!=-1&& buffer_can_read(f->buff_out)){
+        ret |= OP_WRITE;
+    }
+    
+    if(-1==f->infd[R] && -1!=f->outfd[W] && !buffer_can_read(f->buff_in)){
+        close(f->outfd[W]);
+        f->outfd[W] = -1;
+    }
+
+    if(-1 == f->outfd[R] && -1 != f->infd[W] && !buffer_can_read(f->buff_out)){
+        close(f->infd[W]);
+        f->infd[W] = -1;
+    }
+
+      if(SELECTOR_SUCCESS != selector_set_interest(s,nfds,ret)){ //chequear
+        abort(); //TODO mensaje de error?
+    }
+
+    if(-1 == f->infd[R] && -1 == f->outfd[R] && -1 == f->outfd[W] && -1 == f->infd[W]){
+        return; //?
+    }
+
+    return ret;
 }
 */
+
 
