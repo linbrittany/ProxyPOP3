@@ -10,6 +10,7 @@ struct proxy_args {
     char *listen_pop3_admin_address;
     char *listen_pop3_address;
     char *listen_origin_address;
+    char *command;
 };
 
 

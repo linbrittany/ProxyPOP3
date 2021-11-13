@@ -113,6 +113,7 @@ void parse_args(const int argc, const char **argv) {
                 origin_addr_data.port = port(optarg);
                 break;
             case 't':
+                args.command = optarg; //chequear
                 break;
             case 'v':
                 version();
