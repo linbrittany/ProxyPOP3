@@ -75,6 +75,9 @@ struct pop3 {
 
     struct buffer * read_buffer;
     struct buffer * write_buffer;
+
+    /* Persisto si origen soporta una lista de capabilities de POP3 */
+    capabilities origin_capabilities;
     
     error_container error_sender;
 
@@ -89,7 +92,7 @@ struct pop3 {
         //struct connecting conn;
         struct copy copy;
 
-        struct check_capa capa;
+        struct check_capa capabilities;
 
         struct filter filter;
      } origin;
@@ -149,27 +152,6 @@ struct copy * copy_ptr(struct selector_key * key) ;
 
 //static void filter_init(const unsigned state, struct selector_key *key);
 //static fd_interest filter_interest(fd_selector s, struct filter *f);
-
-static void check_capa_init(const unsigned state, struct selector_key *key){
-    // struct pop3 * proxy = ATTACHMENT(key);
-    // struct check_capa * capa = &proxy->origin.capa;
-}
-static unsigned check_capa_read(struct selector_key *key){
-    struct pop3 * proxy = ATTACHMENT(key);
-    uint8_t *writePtr;
-    size_t len = 0;
-    writePtr = malloc(100);
-    int n = recv(proxy->origin_fd, writePtr, len, 0);
-    printf("LEI %d de CLIENTE. MSG : %s",n,writePtr);
-    return CHECK_CAPABILITIES;
-    }
-static unsigned check_capa_write(struct selector_key *key){
-    struct pop3 * proxy = ATTACHMENT(key);
-    int n = send(proxy->origin_fd,"CAPA", 5, MSG_NOSIGNAL);
-    printf("ENVIADOS %d BYTES", n);
-
-    return CHECK_CAPABILITIES;
-}
 
 
 static const struct fd_handler pop3_handler = {
@@ -524,11 +506,8 @@ static unsigned hello_read(struct selector_key * key) {
     ssize_t n = recv(key->fd, write_ptr, len, 0);
     log(INFO, "Receiving %zd bytes from fd %d\n", n, key->fd);
     if (n > 0) {
-        log(DEBUG, "ANTES ADVANCE %p", (void *) buff->write);
         buffer_write_adv(buff, n);
-        log(DEBUG, "DEPOIS ADVANCE %p",(void *) buff->write);
         hello_consume(buff, &hello->parser, &error);
-        log(DEBUG, "DEPOIS CONSUME %p",(void *) buff->write);
         if (!error && SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_NOOP) &&
                 SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_WRITE)) {
             return HELLO;
@@ -557,11 +536,6 @@ static unsigned hello_write(struct selector_key * key) {
     struct buffer * buff = hello->write_buffer;
     size_t len;
     uint8_t * read_ptr = buffer_read_ptr(buff, &len);
-    log(INFO, "READ BUFFER: %s", (buff->read));
-    log(INFO, "WRITE BUFFER: %s", (buff->write));
-    log(DEBUG, "KEY FD %d", key->fd);
-    log(DEBUG, "len %ld", len);
-    len = 5;
     ssize_t n = send(key->fd, read_ptr, len, 0);
     log(DEBUG, "KEY n %ld", n);
     if (n == -1) {
@@ -572,15 +546,64 @@ static unsigned hello_write(struct selector_key * key) {
         if (hello_is_done(hello->parser.state, 0)) {
             if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_WRITE) &&
                SELECTOR_SUCCESS == selector_set_interest_key(key, OP_NOOP))
-                return COPY;
+                return CHECK_CAPABILITIES;
             else
-                return ERROR; 
+                return ERROR;
         }
         if (!buffer_can_read(buff) && SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_READ) &&
                 SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_NOOP)) {
             return HELLO;
         }
     }
+    return ERROR;
+}
+
+//CAPA
+
+static void check_capa_init(const unsigned state, struct selector_key *key){
+    struct pop3 * proxy = ATTACHMENT(key);
+    struct check_capa * check_capabilities = &proxy->origin.capabilities;
+    check_capabilities->capabilities = &proxy->origin_capabilities;
+    check_capabilities->read_b = proxy->read_buffer;
+}
+
+static const char *capa_msg = "CAPA\n";
+static const int CAPA_MSG_LEN = 5;
+
+
+/*lectura y parseo de la respuesta del origen */
+static unsigned check_capa_read(struct selector_key *key){
+    struct pop3 * proxy = ATTACHMENT(key);
+    struct check_capa * check_capabilities = &proxy->origin.capabilities;
+    buffer * buff       = check_capabilities->read_b;
+    size_t len;
+    uint8_t * write_ptr = buffer_write_ptr(buff, &len);
+    ssize_t n = recv(key->fd, write_ptr, len, 0);
+    if( n > 0){
+        log(INFO, "LEI %ld bytes del ORIGEN.",n);
+        if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_READ) &&
+               SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ))
+            return COPY;
+        else
+            return ERROR;
+    }
+    shutdown(key->fd, SHUT_RD);
+    return ERROR;
+}
+
+/*Le envio a origen el comando CAPA */
+static unsigned check_capa_write(struct selector_key *key){
+    struct pop3 * proxy = ATTACHMENT(key);
+    //struct check_capa * check_capabilities = &proxy->origin.capabilities;
+    int n = send(key->fd, capa_msg, CAPA_MSG_LEN, MSG_NOSIGNAL);
+    if(n > 0){
+        log(INFO,"ENVIADOS %d BYTES", n);
+        if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_READ) &&
+               SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ) ) {
+            return CHECK_CAPABILITIES;
+        }
+    }
+    shutdown(key->fd, SHUT_RD);
     return ERROR;
 }
 
