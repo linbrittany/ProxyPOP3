@@ -70,13 +70,12 @@ extern bool hello_is_done(const enum hello_state state, bool *errored) {
 
 extern enum hello_state hello_consume(buffer *b, struct hello_parser *p, bool *errored) {
     enum hello_state st = p->state;
-    while(buffer_can_read(b)) {
-        const uint8_t c = buffer_read(b);
+    while(buffer_can_parse(b)) {
+        const uint8_t c = buffer_parse(b);
         st = hello_parser_feed(p, c);
         if (hello_is_done(st, errored)) {
             break;
         }
     }
-    printf("HELLO CONSUME %d\n", *errored);
     return st;
 }

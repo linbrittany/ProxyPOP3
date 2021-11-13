@@ -12,6 +12,7 @@
 inline void buffer_reset(buffer *b) {
     b->read  = b->data;
     b->write = b->data;
+    b->parsed = b->data;
 }
 
 struct buffer * buffer_init(const size_t n) {
@@ -30,6 +31,10 @@ inline uint8_t *buffer_write_ptr(buffer *b, size_t *nbyte) {
     assert(b->write <= b->limit);
     *nbyte = b->limit - b->write;
     return b->write;
+}
+
+inline bool buffer_can_parse(buffer *b) {
+    return b->write - b->parsed > 0;
 }
 
 inline bool buffer_can_read(buffer *b) {
@@ -61,11 +66,32 @@ inline void buffer_read_adv(buffer *b, const ssize_t bytes) {
     }
 }
 
+inline void buffer_parse_adv(buffer *b, const ssize_t bytes) {
+    if (bytes > -1) {
+        b->parsed += (size_t) bytes;
+        assert(b->parsed <= b->write);
+        if (b->parsed == b->write) {
+            b->parsed = b->data;
+        }
+    }
+}
+
 inline uint8_t buffer_read(buffer *b) {
     uint8_t ret;
     if(buffer_can_read(b)) {
         ret = *b->read;
         buffer_read_adv(b, 1);
+    } else {
+        ret = 0;
+    }
+    return ret;
+}
+
+inline uint8_t buffer_parse(buffer *b) {
+    uint8_t ret;
+    if(buffer_can_parse(b)) {
+        ret = *b->parsed;
+        buffer_parse_adv(b, 1);
     } else {
         ret = 0;
     }
@@ -79,8 +105,7 @@ inline void buffer_write(buffer *b, uint8_t c) {
     }
 }
 
-void
-buffer_compact(buffer *b) {
+void buffer_compact(buffer *b) {
     if(b->data == b->read) {
         // nada por hacer
     } else if(b->read == b->write) {
