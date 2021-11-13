@@ -133,18 +133,23 @@ struct copy * copy_ptr(struct selector_key * key) ;
 
 
 static void check_capa_init(const unsigned state, struct selector_key *key){
-    // struct pop3 * proxy = ATTACHMENT(key);
+    struct pop3 * proxy = ATTACHMENT(key);
+    struct check_capa * capa = &proxy->origin.capa;
 }
 static unsigned check_capa_read(struct selector_key *key){
-    // struct pop3 * proxy = ATTACHMENT(key);
-    
-    return 1;
+    struct pop3 * proxy = ATTACHMENT(key);
+    uint8_t *writePtr = proxy->origin.capa.read_b;
+    size_t len;
+    writePtr = getWritePtr(writePtr, &len);
+    int n = recv(key->fd, writePtr, len, 0);
+    printf("LEI %d de CLIENTE. MSG : %s",n,writePtr);
+    return CHECK_CAPABILITIES;
     }
 static unsigned check_capa_write(struct selector_key *key){
     // struct pop3 * proxy = ATTACHMENT(key);
     int n = send(key->fd,"CAPA", 5, MSG_NOSIGNAL);
     printf("ENVIADOS %d BYTES", n);
-    return 1;
+    return CHECK_CAPABILITIES;
     }
 
 
@@ -477,7 +482,7 @@ static unsigned connection_done(struct selector_key * key) {
 
         return HELLO;
     }
-    return ERROR;     
+    return ERROR;
 }
 
 //HELLO
