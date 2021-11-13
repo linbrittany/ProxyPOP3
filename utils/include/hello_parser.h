@@ -7,8 +7,8 @@
 #include "buffer.h"
 
 enum hello_state {
+    hello_indicator,
     hello_message,
-    hello_end_message,
     hello_crlf,
     hello_done,
     hello_error,

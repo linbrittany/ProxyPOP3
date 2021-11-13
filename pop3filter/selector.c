@@ -19,6 +19,7 @@
 #include <sys/signal.h>
 
 #include "selector.h"
+#include "logger.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
@@ -439,6 +440,7 @@ static void handle_iteration(fd_selector s) {
             key.data = item->data;
             if(FD_ISSET(item->fd, &s->slave_r)) {
                 if(OP_READ & item->interest) {
+                    log(INFO, "fd %d ready to be read\n", item->fd);
                     if(0 == item->handler->handle_read) {
                         assert(("OP_READ arrived but no handler. bug!" == 0));
                     } else {
@@ -448,7 +450,7 @@ static void handle_iteration(fd_selector s) {
             }
             if(FD_ISSET(i, &s->slave_w)) {
                 if(OP_WRITE & item->interest) {
-                    
+                    log(INFO, "fd %d ready to be written\n", item->fd);
                     if(0 == item->handler->handle_write) {
                         assert(("OP_WRITE arrived but no handler. bug!" == 0));
                     } else {

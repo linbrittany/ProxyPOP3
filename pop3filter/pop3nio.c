@@ -16,6 +16,7 @@
 #include "buffer.h"
 #include "netutils.h"
 #include "hello_parser.h"
+#include "logger.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 #define MAX_BUFF 4000
@@ -252,8 +253,6 @@ static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info or
     new_pop3->stm.max_state = ERROR;
     new_pop3->stm.states = client_state_def;
 
-    
-
     stm_init(&new_pop3->stm);
     return new_pop3;
 }
@@ -267,6 +266,7 @@ void pop3_passive_accept(struct selector_key *key) {
     pthread_t tid;
 
     const int client = accept(key->fd, (struct sockaddr*) &client_addr, &client_addr_len);
+    log(INFO, "Accepting client for fd: %d\n", client);
     if(client == -1) {
         goto fail;
     }
@@ -287,11 +287,10 @@ void pop3_passive_accept(struct selector_key *key) {
         goto fail;
     }
 
-
     if(origin_addr_data->type != ADDR_DOMAIN) 
         state->stm.initial = connecting(key->s, state);
     else {
-        // logInfo("Need to resolv the domain name: %s.", origin_addr_data->addr.fqdn);
+        log(INFO, "Need to resolv the domain name: %s.", origin_addr_data->addr.fqdn);
         struct selector_key * blockingKey = malloc(sizeof(*blockingKey));
         if(blockingKey == NULL)
             goto fail2;
@@ -494,7 +493,7 @@ static unsigned connection_done(struct selector_key * key) {
         return ERROR;
     }
     else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
-
+        printf("SELECTOR FD %d\n", key->fd);
         return HELLO;
     }
     return ERROR;     
@@ -530,10 +529,12 @@ static unsigned hello_read(struct selector_key * key) {
         }
     }
     else {
+        printf("%zd recv\n", n);
         shutdown(key->fd, SHUT_RD);
         error = true;
     }
     if (error) {
+        log(INFO, "Initial hello error for client: %d\n", proxy->client_fd);
         proxy->error_sender.message = "-ERR\r\n";
         if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_WRITE)) {
             return SEND_ERROR_MSG;

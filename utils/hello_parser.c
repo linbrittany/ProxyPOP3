@@ -11,25 +11,22 @@ static const size_t hello_positive_message_size = 3;
 static const char * crlf_message = "\r\n";
 
 extern void hello_parser_init(struct hello_parser *p) {
-   p->state     = hello_message;
+   p->state = hello_message;
    p->remaining = 0;
 }
 
 extern enum hello_state hello_parser_feed(struct hello_parser *p, const uint8_t b) {
     switch(p->state) {
-        case hello_message:
+        case hello_indicator:
             if(b != hello_positive_message[p->remaining]) {
                 p->state = hello_error;
             } else if (p->remaining == (hello_positive_message_size - 1)){
-                p->state = hello_end_message;
+                p->state = hello_message;
             }
             break;
-        case hello_end_message:
+        case hello_message:
             if (b == crlf_message[0]) {
                 p->state = hello_crlf;
-            }
-            else {
-                p->state = hello_error;
             }
             break;
         case hello_crlf:
