@@ -97,7 +97,7 @@ struct pop3 {
     address_info origin_addr_data;
 
     struct addrinfo *origin_resolution; //No pisarlo porque hay que liberarlo
-    struct addrinfo *curr_origin_resolution; 
+    struct addrinfo *curr_origin_resolution;
 
     unsigned references;
 
@@ -151,24 +151,25 @@ struct copy * copy_ptr(struct selector_key * key) ;
 //static fd_interest filter_interest(fd_selector s, struct filter *f);
 
 static void check_capa_init(const unsigned state, struct selector_key *key){
-    struct pop3 * proxy = ATTACHMENT(key);
-    struct check_capa * capa = &proxy->origin.capa;
+    // struct pop3 * proxy = ATTACHMENT(key);
+    // struct check_capa * capa = &proxy->origin.capa;
 }
 static unsigned check_capa_read(struct selector_key *key){
     struct pop3 * proxy = ATTACHMENT(key);
-    uint8_t *writePtr = proxy->origin.capa.read_b;
-    size_t len;
-    writePtr = getWritePtr(writePtr, &len);
-    int n = recv(key->fd, writePtr, len, 0);
+    uint8_t *writePtr;
+    size_t len = 0;
+    writePtr = malloc(100);
+    int n = recv(proxy->origin_fd, writePtr, len, 0);
     printf("LEI %d de CLIENTE. MSG : %s",n,writePtr);
     return CHECK_CAPABILITIES;
     }
 static unsigned check_capa_write(struct selector_key *key){
-    // struct pop3 * proxy = ATTACHMENT(key);
-    int n = send(key->fd,"CAPA", 5, MSG_NOSIGNAL);
+    struct pop3 * proxy = ATTACHMENT(key);
+    int n = send(proxy->origin_fd,"CAPA", 5, MSG_NOSIGNAL);
     printf("ENVIADOS %d BYTES", n);
+
     return CHECK_CAPABILITIES;
-    }
+}
 
 
 static const struct fd_handler pop3_handler = {
@@ -271,7 +272,6 @@ void pop3_passive_accept(struct selector_key *key) {
     pthread_t tid;
 
     const int client = accept(key->fd, (struct sockaddr*) &client_addr, &client_addr_len);
-    log(INFO, "Accepting client for fd: %d\n", client);
     if(client == -1) {
         goto fail;
     }
@@ -295,7 +295,7 @@ void pop3_passive_accept(struct selector_key *key) {
     if(origin_addr_data->type != ADDR_DOMAIN) 
         state->stm.initial = connecting(key->s, state);
     else {
-        log(INFO, "Need to resolv the domain name: %s.", origin_addr_data->addr.fqdn);
+        // logInfo("Need to resolv the domain name: %s.", origin_addr_data->addr.fqdn);
         struct selector_key * blockingKey = malloc(sizeof(*blockingKey));
         if(blockingKey == NULL)
             goto fail2;
@@ -303,9 +303,8 @@ void pop3_passive_accept(struct selector_key *key) {
         blockingKey->s  = key->s;
         blockingKey->fd   = client;
         blockingKey->data = state;
-        if(-1 == pthread_create(&tid, 0, resolv_blocking, blockingKey)) {            
+        if(-1 == pthread_create(&tid, 0, resolv_blocking, blockingKey)) {
             // logError("Unable to create a new thread. Client Address: %s", state->session.clientString);
-            
             // proxy->error_sender.message = "-ERR Unable to connect.\r\n";
             if(SELECTOR_SUCCESS != selector_set_interest(key->s, state->client_fd, OP_WRITE))
                 goto fail2;
@@ -498,7 +497,7 @@ static unsigned connection_done(struct selector_key * key) {
         return ERROR;
     }
     else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
-        printf("SELECTOR FD %d\n", key->fd);
+
         return HELLO;
     }
     return ERROR;
@@ -522,9 +521,13 @@ static unsigned hello_read(struct selector_key * key) {
     size_t len;
     uint8_t * write_ptr = buffer_write_ptr(buff, &len);
     ssize_t n = recv(key->fd, write_ptr, len, 0);
+    log(DEBUG, "RECV n %ld", n);
     if (n > 0) {
+        log(DEBUG, "ANTES ADVANCE %p", (void *) buff->write);
         buffer_write_adv(buff, n);
+        log(DEBUG, "DEPOIS ADVANCE %p",(void *) buff->write);
         hello_consume(buff, &hello->parser, &error);
+        log(DEBUG, "DEPOIS CONSUME %p",(void *) buff->write);
         if (!error && SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_NOOP) &&
                 SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_WRITE)) {
             return HELLO;
@@ -534,12 +537,10 @@ static unsigned hello_read(struct selector_key * key) {
         }
     }
     else {
-        printf("%zd recv\n", n);
         shutdown(key->fd, SHUT_RD);
         error = true;
     }
     if (error) {
-        log(INFO, "Initial hello error for client: %d\n", proxy->client_fd);
         proxy->error_sender.message = "-ERR\r\n";
         if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_WRITE)) {
             return SEND_ERROR_MSG;
@@ -555,7 +556,13 @@ static unsigned hello_write(struct selector_key * key) {
     struct buffer * buff = hello->write_buffer;
     size_t len;
     uint8_t * read_ptr = buffer_read_ptr(buff, &len);
+    log(INFO, "READ BUFFER: %s", (buff->read));
+    log(INFO, "WRITE BUFFER: %s", (buff->write));
+    log(DEBUG, "KEY FD %d", key->fd);
+    log(DEBUG, "len %ld", len);
+    len = 5;
     ssize_t n = send(key->fd, read_ptr, len, 0);
+    log(DEBUG, "KEY n %ld", n);
     if (n == -1) {
         shutdown(key->fd, SHUT_WR);
         return ERROR;
