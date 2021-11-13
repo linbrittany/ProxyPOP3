@@ -458,6 +458,7 @@ static unsigned connecting(fd_selector s, struct pop3 * proxy) {
 
             /** Esperamos la conexion en el nuevo socket. */
             status = selector_register(s, proxy->origin_fd, &pop3_handler, OP_WRITE, proxy);
+            log(INFO, "Registering origin: %d\n", proxy->origin_fd);
             if(status != SELECTOR_SUCCESS) 
                 goto finally;
         
@@ -475,7 +476,7 @@ static unsigned connecting(fd_selector s, struct pop3 * proxy) {
 
 finally:    
     // logError("Problem connecting to origin server. Client Address: %s", proxy->session.clientString);
-    // proxy->error_sender.message = "-ERR Connection refused.\r\n";
+    proxy->error_sender.message = "-ERR Connection refused.\r\n";
     if(SELECTOR_SUCCESS != selector_set_interest(s, proxy->client_fd, OP_WRITE))
         return ERROR;
     return SEND_ERROR_MSG;
@@ -492,12 +493,13 @@ static unsigned connection_done(struct selector_key * key) {
     if ((error = getsockopt(key->fd, SOL_SOCKET, SO_ERROR, &error, &len)) < 0) {
 
         if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy_pop3->client_fd, OP_WRITE)) { //Setear cliente para escritura
+            log(INFO, "Setting fd %d to be written\n", proxy_pop3->client_fd);
             return SEND_ERROR_MSG;
         }
         return ERROR;
     }
     else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
-
+        log(INFO, "Connection established for client %d and origin %d\n", proxy_pop3->client_fd, key->fd);
         return HELLO;
     }
     return ERROR;
@@ -513,7 +515,6 @@ static void hello_init(const unsigned state, struct selector_key * key) {
 }
 
 static unsigned hello_read(struct selector_key * key) {
-    printf("hello read\n");
     struct pop3 * proxy = ATTACHMENT(key);
     struct hello_st * hello = &proxy->origin.hello;
     struct buffer * buff = hello->write_buffer;
@@ -521,7 +522,7 @@ static unsigned hello_read(struct selector_key * key) {
     size_t len;
     uint8_t * write_ptr = buffer_write_ptr(buff, &len);
     ssize_t n = recv(key->fd, write_ptr, len, 0);
-    log(DEBUG, "RECV n %ld", n);
+    log(INFO, "Receiving %zd bytes from fd %d\n", n, key->fd);
     if (n > 0) {
         log(DEBUG, "ANTES ADVANCE %p", (void *) buff->write);
         buffer_write_adv(buff, n);
@@ -547,7 +548,7 @@ static unsigned hello_read(struct selector_key * key) {
         }
         return ERROR;
     }
-    return CHECK_CAPABILITIES;
+    return HELLO;
 }
 
 static unsigned hello_write(struct selector_key * key) {
@@ -658,7 +659,6 @@ static unsigned copy_r(struct selector_key *key){
     }
 
     copy_interest(key->s,c);
-    printf("HOLA");
     copy_interest(key->s,c->other);
     if(c->duplex == OP_NOOP){
         ret = DONE;
@@ -668,9 +668,7 @@ static unsigned copy_r(struct selector_key *key){
 }
 
 static unsigned copy_w(struct selector_key *key){
-    
     struct copy *c = copy_ptr(key); 
-    printf("COPY_W");
     assert(*c->fd == key->fd);
     size_t size;
     ssize_t n;
