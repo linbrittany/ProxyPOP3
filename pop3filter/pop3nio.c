@@ -15,7 +15,10 @@
 #include "pop3nio.h"
 #include "buffer.h"
 #include "netutils.h"
+/*parsers*/
 #include "hello_parser.h"
+#include "capa_parser.h"
+
 #include "logger.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
@@ -40,17 +43,11 @@ struct copy
     fd_interest duplex;
 };
 
-
-typedef struct capabilities {
-    //Listado de las capabilities a negociar con origen
-    bool pipelining;
-} capabilities;
-
-
 struct check_capa
 {
     buffer       *read_b;
     capabilities *capabilities;
+    capa_parser   parser;
 };
 
 
@@ -565,6 +562,7 @@ static void check_capa_init(const unsigned state, struct selector_key *key){
     struct check_capa * check_capabilities = &proxy->origin.capabilities;
     check_capabilities->capabilities = &proxy->origin_capabilities;
     check_capabilities->read_b = proxy->read_buffer;
+    capa_parser_init(&check_capabilities->parser, check_capabilities->capabilities);
 }
 
 static const char *capa_msg = "CAPA\n";
@@ -576,16 +574,28 @@ static unsigned check_capa_read(struct selector_key *key){
     struct pop3 * proxy = ATTACHMENT(key);
     struct check_capa * check_capabilities = &proxy->origin.capabilities;
     buffer * buff       = check_capabilities->read_b;
+    bool error = false;
     size_t len;
     uint8_t * write_ptr = buffer_write_ptr(buff, &len);
     ssize_t n = recv(key->fd, write_ptr, len, 0);
     if( n > 0){
         log(INFO, "LEI %ld bytes del ORIGEN.",n);
-        if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_READ) &&
-               SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ))
-            return COPY;
-        else
+        buffer_write_adv(buff,n);
+        capa_state parser_state  = capa_parser_consume(&check_capabilities->parser, buff, &error);
+        log(INFO, "LEI %d state.",parser_state);
+        if(error){
+            log(ERR,"Error en el parser del comando CAPA %d\n",1);
             return ERROR;
+        }
+        if(capa_parser_done(parser_state,0)) {
+            if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_READ) &&
+               SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)){
+                log(INFO, "El origen %ssoporta pipelining\n", check_capabilities->parser.capa_list->pipelining == true ? "" : "no ");
+                return COPY;
+               }
+            else
+                return ERROR;
+        }
     }
     shutdown(key->fd, SHUT_RD);
     return ERROR;
