@@ -24,13 +24,20 @@
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 #define MAX_BUFF 4000
 
+
+
+//In[W] -----> pipe 1 IN[R] 
+//Out[R]<------ pipe 2 Out[W]                 
+
+
 struct filter{
-    int                 infd[2];
-    int                 outfd[2];
+    int                 in[2]; //pipes 
+    int                 out[2];
     pid_t               pid;
     //char * command;
-    fd_interest interest;
+    fd_interest duplex[2]; // los intereses
     buffer *buff_in,*buff_out;
+    int *fd;
     
 };
 
@@ -148,7 +155,7 @@ static unsigned check_capa_write(struct selector_key *key);
 struct copy * copy_ptr(struct selector_key * key) ;
 
 //static void filter_init(const unsigned state, struct selector_key *key);
-//static fd_interest filter_interest(fd_selector s, struct filter *f);
+//static void filter_interest(fd_selector s, struct filter *f);
 
 
 static const struct fd_handler pop3_handler = {
@@ -668,7 +675,11 @@ static fd_interest copy_interest(fd_selector s, struct copy *c){
 }
 
 static unsigned copy_r(struct selector_key *key){
+
+   
     struct copy *c = copy_ptr(key); 
+
+    //filter_init(COPY,key); //hay que ver donde va el filter_init
 
     assert(*c->fd == key->fd);
     size_t size;
@@ -773,14 +784,14 @@ static void filter_init(const unsigned state, struct selector_key *key){
         W=1
     };
     struct filter *f = &ATTACHMENT(key) -> origin.filter;
-
+    f->fd = &ATTACHMENT(key) -> origin_fd;
 
     for(int i = 0; i < 2; i++) {
-        f->infd[i]  = -1;
-        f->outfd[i] = -1;
+        f->in[i]  = -1;
+        f->out[i] = -1;
     }
 
-    if(pipe(f->infd)==-1 || pipe(f->outfd) == -1){
+    if(pipe(f->in)==-1 || pipe(f->out) == -1){
         perror("error creating pipes");
         exit(EXIT_FAILURE);
         return;
@@ -794,28 +805,28 @@ static void filter_init(const unsigned state, struct selector_key *key){
         exit(EXIT_FAILURE);
         return; //todo estado de error?
     }else if(pid == 0){
-        close(f->infd[W]);
-        close(f->outfd[R]);
-        f->infd[W] = f->outfd[R] == -1;
-        dup2(f->infd[R],STDIN_FILENO);
-        dup2(f->outfd[W],STDOUT_FILENO);
+        close(f->in[W]);
+        close(f->out[R]);
+        f->in[W] = f->out[R] == -1;
+        dup2(f->in[R],STDIN_FILENO);
+        dup2(f->out[W],STDOUT_FILENO);
 
         set_variables(ATTACHMENT(key));   //setear variables de entorno
        if(-1 == execl("/bin/sh", "sh", "-c", args.command, (char *) 0)){
            //llevar a estado de error?
            perror("executing command");
-           close(f->infd[R]);
-           close(f->outfd[W]);
+           close(f->in[R]);
+           close(f->out[W]);
        }
 
     }else{
-        close(f->infd[R]);
-        close(f->outfd[W]);
-        f->infd[R] = f->outfd[R] = -1;
+        close(f->in[R]);
+        close(f->out[W]);
+        f->in[R] = f->out[R] = -1;
 
-        //int fds[] = {infd,outfd,f->infd[W],f->outfd[R]};
+        //int fds[] = {in,out,f->in[W],f->out[R]};
         //serve(fds);
-        f->interest = filter_interest(key->s,f);
+        filter_interest(key->s,f);
     }
 
 
@@ -823,8 +834,7 @@ static void filter_init(const unsigned state, struct selector_key *key){
 }
 
 int fd_select(int fd[2], int n){
-     printf("FD_SELECT");
-    fflush(stdout);
+
     for(int i = 0; i<2; i++){
         if(fd[i] > n){
             n = fd[i];
@@ -833,17 +843,18 @@ int fd_select(int fd[2], int n){
     }
     return n;
 }
-static fd_interest filter_interest(fd_selector s, struct filter *f){
+ void filter_interest(fd_selector s, struct filter *f){
     
        enum{
         R=0,
         W=1
     };
 
-    int nfds = fd_select(f->infd,0);
-    nfds = fd_select(f->outfd,nfds);
+    int nfds = fd_select(f->in,0);
+    nfds = fd_select(f->out,nfds);
 
-    fd_interest ret = OP_NOOP;
+    f->duplex[0] = OP_NOOP;
+    f->duplex[1] = OP_NOOP;
     f->buff_in = buffer_init(MAX_BUFF);
     f->buff_out = buffer_init(MAX_BUFF);
 
@@ -851,41 +862,61 @@ static fd_interest filter_interest(fd_selector s, struct filter *f){
     FD_ZERO(&readfd); 
     FD_ZERO(&writefd);
 
+
+
+   printf("Primero");
    //Hasta aca funciona
-    if(f->infd[R]!=-1&& buffer_can_write(f->buff_in)){
-        ret |= OP_READ; //me subscribo si tengo lugar en el buffer 
+    if(f->in[R]!=-1&& buffer_can_write(f->buff_in)){
+        FD_SET(f->in[R],&readfd); 
+        f->duplex[0] |= OP_READ; //me subscribo si tengo lugar en el buffer 
     }
 
-    if(f->outfd[R]!=-1&& buffer_can_write(f->buff_out)){
-        ret |= OP_READ;
+       printf("   2");
+    if(f->out[R]!=-1&& buffer_can_write(f->buff_out)){
+        FD_SET(f->out[R],&readfd); 
+         f->duplex[1] |= OP_READ; //me subscribo si tengo lugar en el buffer 
     }
-    if(f->outfd[W]!=-1&& buffer_can_read(f->buff_in)){
-        ret |= OP_WRITE;
+     printf("   3");
+    if(f->out[W]!=-1&& buffer_can_read(f->buff_in)){
+        FD_SET(f->out[W],&writefd); 
+         f->duplex[1] |= OP_WRITE; //me subscribo si tengo lugar en el buffer 
     }
-    if(f->infd[W]!=-1&& buffer_can_read(f->buff_out)){
-        ret |= OP_WRITE;
+    printf("   4");
+    if(f->in[W]!=-1&& buffer_can_read(f->buff_out)){
+        FD_SET(f->in[R],&writefd); 
+        f->duplex[0] |= OP_WRITE; //me subscribo si tengo lugar en el buffer 
     }
+
+    printf("   5");
     
-    if(-1==f->infd[R] && -1!=f->outfd[W] && !buffer_can_read(f->buff_in)){
-        close(f->outfd[W]);
-        f->outfd[W] = -1;
-    }
-
-    if(-1 == f->outfd[R] && -1 != f->infd[W] && !buffer_can_read(f->buff_out)){
-        close(f->infd[W]);
-        f->infd[W] = -1;
-    }
-
-      if(SELECTOR_SUCCESS != selector_set_interest(s,nfds,ret)){ //chequear
+      if(SELECTOR_SUCCESS != selector_set_interest(s,*f->fd,f->duplex[0])){ //chequear
         abort(); //TODO mensaje de error?
     }
 
-    if(-1 == f->infd[R] && -1 == f->outfd[R] && -1 == f->outfd[W] && -1 == f->infd[W]){
-        return -1; //?
+    printf("   6");
+
+      if(SELECTOR_SUCCESS != selector_set_interest(s,*f->fd,f->duplex[1])){ //chequear
+        abort(); //TODO mensaje de error?
     }
 
-    return ret;
-}*/
+    printf("   7");
+
+    if(-1==f->in[R] && -1!=f->out[W] && !buffer_can_read(f->buff_in)){
+        close(f->out[W]);
+        f->out[W] = -1;
+    }
+
+
+    printf("   8");
+
+    if(-1 == f->out[R] && -1 != f->in[W] && !buffer_can_read(f->buff_out)){
+        close(f->in[W]);
+        f->in[W] = -1;
+    }
+
+    printf("LLEGUE AL FINAL");
+}
+*/
 
 
 
