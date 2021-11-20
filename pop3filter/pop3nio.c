@@ -614,7 +614,7 @@ static unsigned check_capa_write(struct selector_key *key){
     //struct check_capa * check_capabilities = &proxy->origin.capabilities;
     int n = send(key->fd, capa_msg, CAPA_MSG_LEN, MSG_NOSIGNAL);
     if(n > 0){
-        log(INFO,"ENVIADOS %d BYTES", n);
+        log(INFO, "Bytes sent: %d\n", n);
         if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_READ) &&
                SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ) ) {
             return CHECK_CAPABILITIES;
