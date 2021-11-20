@@ -31,13 +31,13 @@
 
 
 struct filter{
-    int                 in[2]; //pipes 
+    int                 in[2]; //pipes pueden ser 1
     int                 out[2];
-    pid_t               pid;
+    pid_t               pid; // pid del proceso creado ej cat
     //char * command;
     fd_interest duplex[2]; // los intereses
-    buffer *buff_in,*buff_out;
-    int *fd;
+    //buffer *buff_in,*buff_out;
+    //int *fd;
     
 };
 
@@ -154,9 +154,12 @@ static unsigned check_capa_read(struct selector_key *key);
 static unsigned check_capa_write(struct selector_key *key);
 struct copy * copy_ptr(struct selector_key * key) ;
 
-//static void filter_init(const unsigned state, struct selector_key *key);
-//static void filter_interest(fd_selector s, struct filter *f);
-
+/*
+static void filter_init(const unsigned state, struct selector_key *key);
+static void filter_interest(fd_selector s, struct filter *f, buffer * buff_in, buffer * buff_out);
+static int filter_write(int * fd, buffer * buff);
+static int filter_read(int * fd, buffer * buff);
+*/
 
 static const struct fd_handler pop3_handler = {
     .handle_read   = pop3_read,
@@ -719,7 +722,12 @@ static unsigned copy_w(struct selector_key *key){
     buffer *b = c->write_b;
     unsigned ret = COPY; //ESTADO DE RETORNO?
 
+
+       //tengo que llamar al filter?
+
     uint8_t *ptr = buffer_read_ptr(b,&size);
+    
+ 
     n = send(key->fd,ptr,size,MSG_NOSIGNAL);
     if(n==-1){
         shutdown(*c->fd,SHUT_WR);
@@ -766,6 +774,7 @@ static unsigned write_error_msg(struct selector_key * key) {
 
 //filter
 
+
 /*
 
 static void set_variables(struct pop3 * pop3_struct){
@@ -784,7 +793,7 @@ static void filter_init(const unsigned state, struct selector_key *key){
         W=1
     };
     struct filter *f = &ATTACHMENT(key) -> origin.filter;
-    f->fd = &ATTACHMENT(key) -> origin_fd;
+    //f->fd = &ATTACHMENT(key) -> origin_fd;
 
     for(int i = 0; i < 2; i++) {
         f->in[i]  = -1;
@@ -804,14 +813,16 @@ static void filter_init(const unsigned state, struct selector_key *key){
         perror("creating process");
         exit(EXIT_FAILURE);
         return; //todo estado de error?
-    }else if(pid == 0){
-        close(f->in[W]);
+    }else if(pid == 0){ // soy el hijo ej cat
+        close(f->in[W]); // no quiero escribir en el pipe de escritura si soy el hijo
         close(f->out[R]);
+
         f->in[W] = f->out[R] == -1;
-        dup2(f->in[R],STDIN_FILENO);
+        dup2(f->in[R],STDIN_FILENO); //"redirect"
         dup2(f->out[W],STDOUT_FILENO);
 
         set_variables(ATTACHMENT(key));   //setear variables de entorno
+
        if(-1 == execl("/bin/sh", "sh", "-c", args.command, (char *) 0)){
            //llevar a estado de error?
            perror("executing command");
@@ -822,11 +833,11 @@ static void filter_init(const unsigned state, struct selector_key *key){
     }else{
         close(f->in[R]);
         close(f->out[W]);
-        f->in[R] = f->out[R] = -1;
+        f->in[R] = f->out[W] = -1;
 
         //int fds[] = {in,out,f->in[W],f->out[R]};
         //serve(fds);
-        filter_interest(key->s,f);
+        //filter_interest(key->s,f);
     }
 
 
@@ -842,21 +853,24 @@ int fd_select(int fd[2], int n){
         
     }
     return n;
-}
- void filter_interest(fd_selector s, struct filter *f){
+}//  la funcion select te pide el fd mas grande
+
+
+
+ void filter_interest(fd_selector s, struct filter *f, buffer * buff_in, buffer * buff_out){
     
        enum{
         R=0,
         W=1
     };
 
-    int nfds = fd_select(f->in,0);
-    nfds = fd_select(f->out,nfds);
+    //int nfds = fd_select(f->in,0);
+    //nfds = fd_select(f->out,nfds);
 
     f->duplex[0] = OP_NOOP;
     f->duplex[1] = OP_NOOP;
-    f->buff_in = buffer_init(MAX_BUFF);
-    f->buff_out = buffer_init(MAX_BUFF);
+    //f->buff_in = buffer_init(MAX_BUFF);
+    //f->buff_out = buffer_init(MAX_BUFF);
 
     fd_set readfd, writefd;
     FD_ZERO(&readfd); 
@@ -866,42 +880,42 @@ int fd_select(int fd[2], int n){
 
    printf("Primero");
    //Hasta aca funciona
-    if(f->in[R]!=-1&& buffer_can_write(f->buff_in)){
-        FD_SET(f->in[R],&readfd); 
+    if(f->in[R]!=-1&& buffer_can_write(buff_in)){
+        //FD_SET(f->in[R],&readfd); 
         f->duplex[0] |= OP_READ; //me subscribo si tengo lugar en el buffer 
     }
 
        printf("   2");
-    if(f->out[R]!=-1&& buffer_can_write(f->buff_out)){
-        FD_SET(f->out[R],&readfd); 
+    if(f->out[R]!=-1&& buffer_can_write(buff_out)){
+        //FD_SET(f->out[R],&readfd); 
          f->duplex[1] |= OP_READ; //me subscribo si tengo lugar en el buffer 
     }
      printf("   3");
-    if(f->out[W]!=-1&& buffer_can_read(f->buff_in)){
-        FD_SET(f->out[W],&writefd); 
+    if(f->out[W]!=-1&& buffer_can_read(buff_in)){
+        //FD_SET(f->out[W],&writefd); 
          f->duplex[1] |= OP_WRITE; //me subscribo si tengo lugar en el buffer 
     }
     printf("   4");
-    if(f->in[W]!=-1&& buffer_can_read(f->buff_out)){
-        FD_SET(f->in[R],&writefd); 
+    if(f->in[W]!=-1&& buffer_can_read(buff_out)){
+        //FD_SET(f->in[R],&writefd); 
         f->duplex[0] |= OP_WRITE; //me subscribo si tengo lugar en el buffer 
     }
 
     printf("   5");
     
-      if(SELECTOR_SUCCESS != selector_set_interest(s,*f->fd,f->duplex[0])){ //chequear
+      if(SELECTOR_SUCCESS != selector_set_interest(s,f->in[W],f->duplex[0])){ //Escribir cat
         abort(); //TODO mensaje de error?
     }
 
     printf("   6");
 
-      if(SELECTOR_SUCCESS != selector_set_interest(s,*f->fd,f->duplex[1])){ //chequear
+      if(SELECTOR_SUCCESS != selector_set_interest(s,f->out[R],f->duplex[1])){ //Leer
         abort(); //TODO mensaje de error?
     }
 
     printf("   7");
 
-    if(-1==f->in[R] && -1!=f->out[W] && !buffer_can_read(f->buff_in)){
+    if(-1==f->in[R] && -1!=f->out[W] && !buffer_can_read(buff_in)){
         close(f->out[W]);
         f->out[W] = -1;
     }
@@ -909,14 +923,50 @@ int fd_select(int fd[2], int n){
 
     printf("   8");
 
-    if(-1 == f->out[R] && -1 != f->in[W] && !buffer_can_read(f->buff_out)){
+    if(-1 == f->out[R] && -1 != f->in[W] && !buffer_can_read(buff_out)){
         close(f->in[W]);
         f->in[W] = -1;
     }
 
     printf("LLEGUE AL FINAL");
 }
+
+static int filter_read(int * fd, buffer * buff){
+    uint8_t *ptr;
+    ssize_t n;
+    size_t count = 0;
+    int ret = 0;
+    ptr = buffer_write_ptr(buff,&count);
+    n = read(*fd,ptr,count);
+    if(n==0 || n== -1){
+        *fd = -1;
+        ret = -1;
+    }else{
+        buffer_write_adv(buff,n);
+    }
+
+    return ret;
+}
+
+static int filter_write(int * fd, buffer * buff){
+    uint8_t *ptr;
+    ssize_t n;
+    size_t count = 0;
+    int ret = 0;
+    ptr = buffer_read_ptr(buff,&count);
+    n = write(*fd,ptr,count);
+    if(n== -1){
+        *fd = -1;
+        ret = -1;
+    }else{
+        buffer_read_adv(buff,n);
+    }
+
+    return ret;
+}
 */
+
+
 
 
 
