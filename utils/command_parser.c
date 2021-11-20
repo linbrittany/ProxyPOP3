@@ -188,6 +188,19 @@ extern cmd_state cmd_comsume(buffer *b, struct cmd_parser *p, bool * new_cmd) {
     return st;
 }
 
+static bool is_multiline(struct st_command *command, size_t arg_qty) {
+    if (command->type == CMD_LIST || command->type == CMD_UIDL) {
+        return arg_qty == 0;
+    }
+    if (command->type == CMD_TOP) {
+        return arg_qty == 2;
+    }
+    if (command->type == CMD_RETR) {
+        return arg_qty == 1;
+    }
+    return command->type == CMD_CAPA;
+}
+
 void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, bool * new_cmd) {
     if (p->state == CMD_ERROR) {
         current_cmd->type = CMD_OTHER;
@@ -195,7 +208,8 @@ void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, bool * new
             free(current_cmd->arg);
             current_cmd->arg = NULL;
         }    
-    } 
+    }
+    current_cmd->is_multiline = is_multiline(current_cmd, p->arg_qty);
     //agregar a cola
     *new_cmd = true;
     p->state = CMD_TYPE;

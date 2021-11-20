@@ -28,7 +28,7 @@ typedef enum cmd_state {
 
 struct st_command {
     cmd_type type;
-    bool isMutiline;
+    bool is_multiline;
     void * arg;
 };
 
