@@ -9,12 +9,14 @@
 #include <netdb.h>
 #include <sys/socket.h>
 #include <fcntl.h>
+#include <stdint.h>
 
 // #include "selector.h"
 #include "stm.h"
 #include "pop3nio.h"
 #include "buffer.h"
 #include "netutils.h"
+
 /*parsers*/
 #include "hello_parser.h"
 #include "capa_parser.h"
@@ -22,8 +24,10 @@
 #include "response_parser.h"
 
 /*utils*/
-#include "queue.h"
-#include "logger.h"
+#include "../utils/include/queue.h"
+#include "../utils/include/buffer.h"
+#include "../utils/include/logger.h"
+#include "../utils/include/netutils.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 #define MAX_BUFF 4000
@@ -89,7 +93,7 @@ struct pop3 {
     /* Persisto si origen soporta una lista de capabilities de POP3 */
     capabilities origin_capabilities;
 
-    struct Queue commands_queue;
+    struct Queue * commands_queue;
 
     error_container error_sender;
 
@@ -550,7 +554,7 @@ static unsigned connection_done(struct selector_key * key) {
     }
     else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
         log(INFO, "Connection established for client %d and origin %d\n", proxy_pop3->client_fd, key->fd);
-        return COPY;
+        return HELLO;
     }
     return ERROR;
 }
@@ -875,12 +879,14 @@ static unsigned copy_w(struct selector_key *key){
     buffer *b = c->write_b;
     unsigned ret = COPY; //ESTADO DE RETORNO?
 
-    //Check if im origin
-    if(*c->fd == ATTACHMENT(key)->origin_fd)
-
        //tengo que llamar al filter?
 
-    uint8_t *ptr = buffer_read_ptr(b,&size);
+    //Check if im origin
+    if(*c->fd == ATTACHMENT(key)->origin_fd){
+        
+    }
+
+    uint8_t *  ptr = buffer_read_ptr(b,&size);
 
     n = send(key->fd,ptr,size,MSG_NOSIGNAL);
     if(n==-1){
