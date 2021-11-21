@@ -229,6 +229,9 @@ static struct pop3 * current_pool = 0;
 
  /** realmente destruye */
 static void pop3_destroy_(struct pop3* s) {
+    buffer_delete(s->read_buffer);
+    buffer_delete(s->write_buffer);
+
     if(s->origin_resolution != NULL) {
         freeaddrinfo(s->origin_resolution);
         s->origin_resolution = 0;
@@ -253,6 +256,14 @@ static void pop3_destroy(struct pop3 *s) {
         }
     } else {
         s->references -= 1;
+    }
+}
+
+void pop3_pool_destroy() {
+    struct pop3 * next, * current;
+    for (current = current_pool; current != NULL; current = next) {
+        next = current->next;
+        pop3_destroy_(current);
     }
 }
 
@@ -1151,15 +1162,3 @@ static void filter_close(struct selector_key *key) {
 
 static void filter_block(struct selector_key *key) {
 }
-
-
-
-
-
-
-
-
-
-
-
-

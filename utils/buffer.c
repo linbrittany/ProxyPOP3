@@ -118,3 +118,11 @@ void buffer_compact(buffer *b) {
         b->write = b->data + n;
     }
 }
+
+void buffer_delete(buffer *b) {
+    if (b == NULL) {
+        return;
+    }
+    free(b->data);
+    free(b);
+}

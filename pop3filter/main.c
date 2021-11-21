@@ -284,8 +284,7 @@ finally:
     }
     selector_close();
 
-//    socksv5_pool_destroy();
-
+    pop3_pool_destroy();
 
     if(proxy != -1) close(proxy);
     if(admin_proxy != -1) close(admin_proxy);
