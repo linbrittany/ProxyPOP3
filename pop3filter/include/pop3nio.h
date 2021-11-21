@@ -2,6 +2,7 @@
 #define POP3_NIO_H
 
 #include <buffer.h>
+#include "selector.h"
 
 
 struct proxy_args {
