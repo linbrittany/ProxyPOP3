@@ -646,12 +646,10 @@ static unsigned check_capa_write(struct selector_key *key){
 // COPY
 
 struct copy * copy_ptr(struct selector_key * key) {
-  
     struct copy * c = &ATTACHMENT(key)->client.copy;
     while(*c->fd != key->fd){
         c = c->other;
     }
-   
     return c;
 }
 
@@ -683,7 +681,7 @@ static void copy_init(const unsigned state, struct selector_key *key){
     }else{
 
 
-        c->fd = &ATTACHMENT(key)->client_fd;
+    c->fd = &ATTACHMENT(key)->client_fd;
     c->read_b = ATTACHMENT(key)->write_buffer; 
     c->write_b = ATTACHMENT(key)->read_buffer;
     c->duplex = OP_READ | OP_WRITE;
