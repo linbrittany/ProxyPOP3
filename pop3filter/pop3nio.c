@@ -4,11 +4,11 @@
 #include <assert.h>  // assert
 #include <errno.h>
 #include <time.h>
-#include <unistd.h>  // close
+#include <unistd.h>  // close, read?
 #include <pthread.h>
 #include <netdb.h>
 #include <sys/socket.h>
-#include <sys/socket.h>
+#include <fcntl.h>
 
 #include "selector.h"
 #include "stm.h"
@@ -29,16 +29,17 @@
 //In[W] -----> pipe 1 IN[R] 
 //Out[R]<------ pipe 2 Out[W]                 
 
+   enum{
+        R=0,
+        W=1
+    };
 
 struct filter{
-    int                 in[2]; //pipes pueden ser 1
+    int                 in[2]; 
     int                 out[2];
     pid_t               pid; // pid del proceso creado ej cat
     //char * command;
     fd_interest duplex[2]; // los intereses
-    //buffer *buff_in,*buff_out;
-    //int *fd;
-    
 };
 
 
@@ -85,6 +86,8 @@ struct pop3 {
     
     error_container error_sender;
 
+    struct filter filter_data;
+
     /** estados para el client_fd */
     union {
         //struct request_st request;
@@ -98,9 +101,9 @@ struct pop3 {
 
         struct check_capa capabilities;
 
-        struct filter filter;
+        
      } origin;
-
+   
     address_info origin_addr_data;
 
     struct addrinfo *origin_resolution; //No pisarlo porque hay que liberarlo
@@ -155,7 +158,7 @@ static unsigned check_capa_write(struct selector_key *key);
 struct copy * copy_ptr(struct selector_key * key) ;
 
 /*
-static void filter_init(const unsigned state, struct selector_key *key);
+static void filter_init(struct selector_key *key);
 static void filter_interest(fd_selector s, struct filter *f, buffer * buff_in, buffer * buff_out);
 static int filter_write(int * fd, buffer * buff);
 static int filter_read(int * fd, buffer * buff);
@@ -658,6 +661,8 @@ static void copy_init(const unsigned state, struct selector_key *key){
     c->write_b = ATTACHMENT(key)->write_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->client.copy;
+
+    //filter_init(key); // chequear si esto va aca
     
 }
 
@@ -679,19 +684,22 @@ static fd_interest copy_interest(fd_selector s, struct copy *c){
 
 static unsigned copy_r(struct selector_key *key){
 
+   
+
     struct copy *c = copy_ptr(key); 
-
-    //filter_init(COPY,key); //hay que ver donde va el filter_init
-
     assert(*c->fd == key->fd);
     size_t size;
     ssize_t n;
     buffer *b = c->read_b;
     unsigned ret = COPY; 
 
+     //struct filter *f = &ATTACHMENT(key)->filter_data;
+
+   
+    
+
     uint8_t *ptr = buffer_write_ptr(b,&size);
     n = recv(key->fd,ptr,size,0);
-   
     if(n<=0){
         shutdown(*c->fd,SHUT_RD);
         c->duplex &= -OP_WRITE;
@@ -702,10 +710,16 @@ static unsigned copy_r(struct selector_key *key){
 
     }else{
         buffer_write_adv(b,n); 
+        //filter_write(&f->in[W],b);
+        //close(f->in[W]);
+        //filter_read(&f->out[R],b);
+        
     }
 
+    //filter_interest(key->s,f,b,b);
     copy_interest(key->s,c);
     copy_interest(key->s,c->other);
+
     if(c->duplex == OP_NOOP){
         ret = DONE;
     }
@@ -775,7 +789,6 @@ static unsigned write_error_msg(struct selector_key * key) {
 
 
 /*
-
 static void set_variables(struct pop3 * pop3_struct){
 
     setenv("POP3FILTER_VERSION", "0.0.0.0", 1);//cambiar la version
@@ -783,15 +796,18 @@ static void set_variables(struct pop3 * pop3_struct){
 }
 
 
+// static const struct fd_handler filter_handler = {
+//     .handle_read   = filter_read,
+//     .handle_write  = filter_write,
+//     .handle_close  = filter_close,
+//     .handle_block  = filter_block,
+// };
 
-static void filter_init(const unsigned state, struct selector_key *key){
+static void filter_init(struct selector_key *key){
     printf("FILTER_INIT");
     fflush(stdout);
-    enum{
-        R=0,
-        W=1
-    };
-    struct filter *f = &ATTACHMENT(key) -> origin.filter;
+ 
+    struct filter *f = &ATTACHMENT(key) -> filter_data;
     //f->fd = &ATTACHMENT(key) -> origin_fd;
 
     for(int i = 0; i < 2; i++) {
@@ -805,6 +821,8 @@ static void filter_init(const unsigned state, struct selector_key *key){
         return;
     }
 
+   
+
     const pid_t pid = fork();
 
 
@@ -815,24 +833,31 @@ static void filter_init(const unsigned state, struct selector_key *key){
     }else if(pid == 0){ // soy el hijo ej cat
         close(f->in[W]); // no quiero escribir en el pipe de escritura si soy el hijo
         close(f->out[R]);
-
         f->in[W] = f->out[R] == -1;
+
         dup2(f->in[R],STDIN_FILENO); //"redirect"
         dup2(f->out[W],STDOUT_FILENO);
 
         set_variables(ATTACHMENT(key));   //setear variables de entorno
-
+        
        if(-1 == execl("/bin/sh", "sh", "-c", args.command, (char *) 0)){
            //llevar a estado de error?
            perror("executing command");
            close(f->in[R]);
            close(f->out[W]);
        }
+       
 
     }else{
+        
         close(f->in[R]);
         close(f->out[W]);
         f->in[R] = f->out[W] = -1;
+        //selector_fd_set_nio(f->in[W]);
+        //selector_fd_set_nio(f->out[R]);
+
+        //selector_register(key->s, f->in[W], &filter_handler, OP_READ, state)
+     
 
         //int fds[] = {in,out,f->in[W],f->out[R]};
         //serve(fds);
@@ -842,6 +867,7 @@ static void filter_init(const unsigned state, struct selector_key *key){
 
 
 }
+
 
 int fd_select(int fd[2], int n){
 
@@ -902,15 +928,17 @@ int fd_select(int fd[2], int n){
 
     printf("   5");
     
-      if(SELECTOR_SUCCESS != selector_set_interest(s,f->in[W],f->duplex[0])){ //Escribir cat
+    
+      if(SELECTOR_SUCCESS != selector_set_interest(s,f->in[W],f->duplex[W])){ //Escribir cat
         abort(); //TODO mensaje de error?
     }
 
     printf("   6");
 
-      if(SELECTOR_SUCCESS != selector_set_interest(s,f->out[R],f->duplex[1])){ //Leer
+      if(SELECTOR_SUCCESS != selector_set_interest(s,f->out[R],f->duplex[R])){ //Leer
         abort(); //TODO mensaje de error?
     }
+    
 
     printf("   7");
 
@@ -934,36 +962,37 @@ static int filter_read(int * fd, buffer * buff){
     uint8_t *ptr;
     ssize_t n;
     size_t count = 0;
-    int ret = 0;
     ptr = buffer_write_ptr(buff,&count);
     n = read(*fd,ptr,count);
+
+  
     if(n==0 || n== -1){
         *fd = -1;
-        ret = -1;
     }else{
         buffer_write_adv(buff,n);
     }
 
-    return ret;
+    return n;
 }
 
 static int filter_write(int * fd, buffer * buff){
     uint8_t *ptr;
     ssize_t n;
     size_t count = 0;
-    int ret = 0;
     ptr = buffer_read_ptr(buff,&count);
     n = write(*fd,ptr,count);
     if(n== -1){
         *fd = -1;
-        ret = -1;
     }else{
         buffer_read_adv(buff,n);
     }
 
-    return ret;
+    return n;
 }
 */
+
+
+
 
 
 
