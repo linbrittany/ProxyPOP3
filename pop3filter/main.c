@@ -178,7 +178,6 @@ int main(int argc, char const **argv) {
     if((ans = bind(proxy, (struct sockaddr *)&proxy_addr.addr.storage, proxy_addr.addr_len)) < 0) {
         err_msg = "bind() failed for proxy";
         close(proxy);
-        printf("%d",errno);
         exit(1);
     }
 
@@ -190,14 +189,12 @@ int main(int argc, char const **argv) {
 
     if ((ans = listen(proxy, BACKLOG)) < 0) {
         err_msg = "listen() failed for proxy";
-        printf("%s %d\n",err_msg,errno);
         close(proxy);
         exit(1);
     }
 
     if ((ans = listen(admin_proxy, BACKLOG)) < 0) {
         err_msg = "listen() failed for proxy admin";
-        printf("%s %d\n",err_msg,errno);
         close(admin_proxy);
         exit(1);
     }

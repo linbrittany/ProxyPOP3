@@ -17,7 +17,7 @@ enum hello_state {
 struct hello_parser {
     /******** zona privada *****************/
     enum hello_state state;
-    /* metodos que faltan por leer */
+    /* lo que falta por leer */
     size_t remaining;
 };
 

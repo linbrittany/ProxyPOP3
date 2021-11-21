@@ -679,7 +679,6 @@ static fd_interest copy_interest(fd_selector s, struct copy *c){
 
 static unsigned copy_r(struct selector_key *key){
 
-   
     struct copy *c = copy_ptr(key); 
 
     //filter_init(COPY,key); //hay que ver donde va el filter_init

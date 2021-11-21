@@ -30,6 +30,7 @@ struct st_command {
     cmd_type type;
     bool is_multiline;
     void * arg;
+    bool indicator;
 };
 
 struct cmd_parser {
