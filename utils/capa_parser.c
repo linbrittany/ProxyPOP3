@@ -92,7 +92,7 @@ capa_state capa_parser_consume(capa_parser *parser, buffer *buffer, bool *errore
         if (capa_parser_done(status, errored))
             break;
     }
-    log(INFO, "status en consume %d\n", status);
+    log(INFO, "Capa parser consume status %d\n", status);
     return status;
 }
 

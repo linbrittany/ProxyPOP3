@@ -155,4 +155,6 @@ buffer_can_write(buffer *b);
 /** retorna true si se puede seguir parseando en el buffer */
 bool buffer_can_parse(buffer *b);
 
+void buffer_delete(buffer *b);
+
 #endif
