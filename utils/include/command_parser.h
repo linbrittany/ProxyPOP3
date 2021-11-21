@@ -43,6 +43,7 @@ struct cmd_parser {
     int to_check;
 };
 
+void cmd_parser_init(struct cmd_parser * parser);
 void cmd_init(struct st_command * cmd);
 cmd_state cmd_parser_feed(struct cmd_parser * parser, const uint8_t b, bool * new_cmd);
 cmd_state cmd_comsume(buffer *b, struct cmd_parser *p, bool * new_cmd);

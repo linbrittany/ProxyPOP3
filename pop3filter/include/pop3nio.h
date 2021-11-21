@@ -13,8 +13,15 @@ struct proxy_args {
     char *command;
 };
 
+struct proxy_metrics {
+    unsigned long active_connections;
+    unsigned long total_connections;
+
+    unsigned long bytes_transferred;
+};
 
 struct proxy_args args;
+struct proxy_metrics metrics;
 
 void pop3_passive_accept(struct selector_key *key);
 
