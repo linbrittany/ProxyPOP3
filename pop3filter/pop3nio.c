@@ -10,7 +10,7 @@
 #include <sys/socket.h>
 #include <fcntl.h>
 
-#include "selector.h"
+// #include "selector.h"
 #include "stm.h"
 #include "pop3nio.h"
 #include "buffer.h"
@@ -18,7 +18,11 @@
 /*parsers*/
 #include "hello_parser.h"
 #include "capa_parser.h"
+#include "command_parser.h"
+#include "response_parser.h"
 
+/*utils*/
+#include "queue.h"
 #include "logger.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
@@ -26,8 +30,8 @@
 
 
 
-//In[W] -----> pipe 1 IN[R] 
-//Out[R]<------ pipe 2 Out[W]                 
+//In[W] -----> pipe 1 IN[R]
+//Out[R]<------ pipe 2 Out[W]
 
    enum{
         R=0,
@@ -36,7 +40,7 @@
 
 
 struct filter{
-    int                 in[2]; 
+    int                 in[2];
     int                 out[2];
     pid_t               pid; // pid del proceso creado ej cat
     //char * command;
@@ -84,7 +88,9 @@ struct pop3 {
 
     /* Persisto si origen soporta una lista de capabilities de POP3 */
     capabilities origin_capabilities;
-    
+
+    struct Queue commands_queue;
+
     error_container error_sender;
 
     struct filter filter_data;
@@ -120,6 +126,9 @@ struct pop3 {
 
     struct addrinfo *origin_resolution; //No pisarlo porque hay que liberarlo
     struct addrinfo *curr_origin_resolution;
+
+    struct cmd_parser command_parser;
+    struct rsp_parser response_parser;
 
     unsigned references;
 
@@ -218,8 +227,15 @@ static const struct state_definition client_state_def[] = {
     }
 };
 
+static const unsigned pool_max_size = 50;
+static unsigned pool_current_size = 0;
+static struct pop3 * current_pool = 0;
+
  /** realmente destruye */
 static void pop3_destroy_(struct pop3* s) {
+    buffer_delete(s->read_buffer);
+    buffer_delete(s->write_buffer);
+
     if(s->origin_resolution != NULL) {
         freeaddrinfo(s->origin_resolution);
         s->origin_resolution = 0;
@@ -232,40 +248,67 @@ static void pop3_destroy_(struct pop3* s) {
  * y el pool de objetos.
  */
 static void pop3_destroy(struct pop3 *s) {
-    if(s == NULL) {
+    if (s == NULL) {
         // nada para hacer
-    } else if(s->references == 1) {
-        if(s != NULL) {
-//             if(pool_size < max_pool) {
-//                 s->next = pool;
-//                 pool    = s;
-//                 pool_size++;
-//             } else {
-//                 pop3_destroy_(s);
-//             }
+    } else if (s->references == 1) {
+        if (pool_current_size == pool_max_size) {
             pop3_destroy_(s);
+        } else {
+            // s->next = current_pool;
+            current_pool = s;
+            pool_current_size++;
         }
     } else {
         s->references -= 1;
     }
 }
 
+void pop3_pool_destroy() {
+    struct pop3 * next, * current;
+    for (current = current_pool; current != NULL; current = next) {
+        next = current->next;
+        pop3_destroy_(current);
+    }
+}
+
 static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info origin_addr_data) {
 
-    struct pop3 * new_pop3 = malloc(sizeof(struct pop3));
-    memset(new_pop3, 0, sizeof(struct pop3));
-    new_pop3->client_fd = client_fd;
-    new_pop3->origin_fd = -1;
-    new_pop3->read_buffer = buffer_init(buffer_size);
-    new_pop3->write_buffer = buffer_init(buffer_size);
-    new_pop3->origin_addr_data = origin_addr_data;
+    struct pop3 * to_ret;
+    buffer * read_buff;
+    buffer * write_buff;
 
-    new_pop3->stm.initial = RESOLVING;
-    new_pop3->stm.max_state = ERROR;
-    new_pop3->stm.states = client_state_def;
+    if (current_pool == NULL) {
+        to_ret = malloc(sizeof(struct pop3));
+        read_buff = buffer_init(buffer_size);
+        write_buff = buffer_init(buffer_size);
+    } else {
+        to_ret = current_pool;
+        current_pool = current_pool->next;
+        to_ret->next = 0;
+        read_buff = to_ret->read_buffer;
+        write_buff = to_ret->write_buffer;
+        buffer_reset(read_buff);
+        buffer_reset(write_buff);
+    }
 
-    stm_init(&new_pop3->stm);
-    return new_pop3;
+    memset(to_ret, 0, sizeof(sizeof(struct pop3)));
+
+    to_ret->client_fd = client_fd;
+    to_ret->origin_fd = -1;
+    to_ret->read_buffer = read_buff;
+    to_ret->write_buffer = write_buff;
+    to_ret->origin_addr_data = origin_addr_data;
+    to_ret->commands_queue = create_queue();
+
+    to_ret->stm.initial = RESOLVING;
+    to_ret->stm.max_state = ERROR;
+    to_ret->stm.states = client_state_def;
+    stm_init(&to_ret->stm);
+
+    cmd_parser_init(&to_ret->command_parser);
+    rsp_parser_init(&to_ret->response_parser);
+
+    return to_ret;
 }
 
 void pop3_passive_accept(struct selector_key *key) {
@@ -275,6 +318,9 @@ void pop3_passive_accept(struct selector_key *key) {
     address_info * origin_addr_data = (address_info *) key->data;
     struct pop3 *state = NULL;
     pthread_t tid;
+
+    metrics.active_connections++;
+    metrics.total_connections++;
 
     const int client = accept(key->fd, (struct sockaddr*) &client_addr, &client_addr_len);
     if(client == -1) {
@@ -318,11 +364,10 @@ void pop3_passive_accept(struct selector_key *key) {
     }
 
     return;
-
-    //Crear socket entre proxy y servidor origen y registrarlo para escritura
 fail2:
     selector_unregister_fd(key->s, client);
 fail:
+    metrics.active_connections--;
     if(client != -1) {
         close(client);
     }
@@ -560,7 +605,6 @@ static unsigned hello_write(struct selector_key * key) {
     size_t len;
     uint8_t * read_ptr = buffer_read_ptr(buff, &len);
     ssize_t n = send(key->fd, read_ptr, len, 0);
-    log(DEBUG, "KEY n %ld", n);
     if (n == -1) {
         shutdown(key->fd, SHUT_WR);
         return ERROR;
@@ -599,26 +643,24 @@ static const int CAPA_MSG_LEN = 5;
 static unsigned check_capa_read(struct selector_key *key){
     struct pop3 * proxy = ATTACHMENT(key);
     struct check_capa * check_capabilities = &proxy->origin.capabilities;
-    buffer * buff       = check_capabilities->read_b;
+    buffer * buff = check_capabilities->read_b;
     bool error = false;
     size_t len;
     uint8_t * write_ptr = buffer_write_ptr(buff, &len);
     ssize_t n = recv(key->fd, write_ptr, len, 0);
     if( n > 0){
-        log(INFO, "LEI %ld bytes del ORIGEN.",n);
         buffer_write_adv(buff,n);
         capa_state parser_state  = capa_parser_consume(&check_capabilities->parser, buff, &error);
-        log(INFO, "LEI %d state.",parser_state);
         if(error){
-            log(ERR,"Error en el parser del comando CAPA %d\n",1);
+            log(ERR, "Error en el parser del comando CAPA %d\n",1);
             return ERROR;
         }
         if(capa_parser_done(parser_state,0)) {
             if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_READ) &&
                SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)){
-                log(INFO, "El origen %ssoporta pipelining\n", check_capabilities->parser.capa_list->pipelining == true ? "" : "no ");
+                log(INFO, "Orgin %s pipelining\n", check_capabilities->parser.capa_list->pipelining == true ? "supports" : "does not support");
                 return COPY;
-               }
+            }
             else
                 return ERROR;
         }
@@ -646,12 +688,10 @@ static unsigned check_capa_write(struct selector_key *key){
 // COPY
 
 struct copy * copy_ptr(struct selector_key * key) {
-  
     struct copy * c = &ATTACHMENT(key)->client.copy;
     while(*c->fd != key->fd){
         c = c->other;
     }
-   
     return c;
 }
 
@@ -679,7 +719,7 @@ static void copy_init(const unsigned state, struct selector_key *key){
     }else{
 
 
-        c->fd = &ATTACHMENT(key)->client_fd;
+    c->fd = &ATTACHMENT(key)->client_fd;
     c->read_b = ATTACHMENT(key)->write_buffer; 
     c->write_b = ATTACHMENT(key)->read_buffer;
     c->duplex = OP_READ | OP_WRITE;
@@ -782,8 +822,6 @@ static fd_interest copy_interest(fd_selector s, struct copy *c){
 
 static unsigned copy_r(struct selector_key *key){
 
-   
-
     struct copy *c = copy_ptr(key); 
     assert(*c->fd == key->fd);
     size_t size;
@@ -837,12 +875,13 @@ static unsigned copy_w(struct selector_key *key){
     buffer *b = c->write_b;
     unsigned ret = COPY; //ESTADO DE RETORNO?
 
+    //Check if im origin
+    if(*c->fd == ATTACHMENT(key)->origin_fd)
 
        //tengo que llamar al filter?
 
     uint8_t *ptr = buffer_read_ptr(b,&size);
-    
- 
+
     n = send(key->fd,ptr,size,MSG_NOSIGNAL);
     if(n==-1){
         shutdown(*c->fd,SHUT_WR);
@@ -856,7 +895,7 @@ static unsigned copy_w(struct selector_key *key){
     }
     copy_interest(key->s,c);
     copy_interest(key->s,c->other);
-    if(c->duplex == OP_NOOP){ //SE CERRARON LOS DOS 
+    if(c->duplex == OP_NOOP){ //SE CERRARON LOS DOS
         ret = DONE;
     }
     return ret;
@@ -921,8 +960,6 @@ static void filter_init(struct selector_key *key){
         exit(EXIT_FAILURE);
         return;
     }
-
-   
 
     const pid_t pid = fork();
 
@@ -1134,15 +1171,3 @@ static void filter_close(struct selector_key *key) {
 
 static void filter_block(struct selector_key *key) {
 }
-
-
-
-
-
-
-
-
-
-
-
-
