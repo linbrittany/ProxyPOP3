@@ -2,7 +2,7 @@
 #define NET_UTILS_H
 
 #include <netinet/in.h>
-#include "../../pop3filter/include/buffer.h"
+#include "buffer.h"
 
 typedef enum address_type {
     ADDR_IPV4   = 0x01,

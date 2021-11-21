@@ -10,7 +10,7 @@
 #include <sys/socket.h>
 #include <fcntl.h>
 
-#include "selector.h"
+// #include "selector.h"
 #include "stm.h"
 #include "pop3nio.h"
 #include "buffer.h"
