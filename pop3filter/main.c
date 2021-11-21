@@ -82,6 +82,7 @@ void parse_args(const int argc, const char **argv) {
     admin_proxy_addr.port = 9090;
     proxy_addr.port = 1110;
     origin_addr_data.port = 110;
+    args.command = NULL;
 
     int option_arg;
     while (true) {
