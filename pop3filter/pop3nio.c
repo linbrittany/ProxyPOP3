@@ -223,8 +223,8 @@ static const struct state_definition client_state_def[] = {
     }
 };
 
-// static const unsigned pool_max_size = 50;
-// static unsigned pool_current_size = 0;
+static const unsigned pool_max_size = 50;
+static unsigned pool_current_size = 0;
 static struct pop3 * current_pool = 0;
 
  /** realmente destruye */
@@ -241,18 +241,15 @@ static void pop3_destroy_(struct pop3* s) {
  * y el pool de objetos.
  */
 static void pop3_destroy(struct pop3 *s) {
-    if(s == NULL) {
+    if (s == NULL) {
         // nada para hacer
-    } else if(s->references == 1) {
-        if(s != NULL) {
-//             if(pool_size < max_pool) {
-//                 s->next = pool;
-//                 pool    = s;
-//                 pool_size++;
-//             } else {
-//                 pop3_destroy_(s);
-//             }
+    } else if (s->references == 1) {
+        if (pool_current_size == pool_max_size) {
             pop3_destroy_(s);
+        } else {
+            // s->next = current_pool;
+            current_pool = s;
+            pool_current_size++;
         }
     } else {
         s->references -= 1;
@@ -271,7 +268,7 @@ static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info or
         write_buff = buffer_init(buffer_size);
     } else {
         to_ret = current_pool;
-        current_pool = to_ret->next;
+        current_pool = current_pool->next;
         to_ret->next = 0;
         read_buff = to_ret->read_buffer;
         write_buff = to_ret->write_buffer;
