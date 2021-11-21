@@ -169,7 +169,7 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, const uint8_t b, bo
             log(ERR, "Command parser: cannot recognize state %d\n", parser->state);
             break;
     }
-    if (parser->length++ == MAX_CMD_SIZE) {
+    if ((parser->length++) == MAX_CMD_SIZE || (parser->state == CMD_ARGS && parser->arg_len == MAX_ARG_SIZE)) {
         parser->state = CMD_ERROR;
     }
     log(INFO, "Current command parser state: %d\n", parser->state);
@@ -181,11 +181,24 @@ extern cmd_state cmd_comsume(buffer *b, struct cmd_parser *p, bool * new_cmd) {
     while(buffer_can_parse(b)) {
         const uint8_t c = buffer_parse(b);
         st = cmd_parser_feed(p, c, new_cmd);
-        if (*new_cmd) {
+        if (*new_cmd) { //chequear si hay pipeline
             break;
         }
     }
     return st;
+}
+
+static bool is_multiline(struct st_command *command, size_t arg_qty) {
+    if (command->type == CMD_LIST || command->type == CMD_UIDL) {
+        return arg_qty == 0;
+    }
+    if (command->type == CMD_TOP) {
+        return arg_qty == 2;
+    }
+    if (command->type == CMD_RETR) {
+        return arg_qty == 1;
+    }
+    return command->type == CMD_CAPA;
 }
 
 void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, bool * new_cmd) {
@@ -195,7 +208,8 @@ void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, bool * new
             free(current_cmd->arg);
             current_cmd->arg = NULL;
         }    
-    } 
+    }
+    current_cmd->is_multiline = is_multiline(current_cmd, p->arg_qty);
     //agregar a cola
     *new_cmd = true;
     p->state = CMD_TYPE;
