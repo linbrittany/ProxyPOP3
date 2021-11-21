@@ -19,6 +19,8 @@
 #include "hello_parser.h"
 #include "capa_parser.h"
 
+/*utils*/
+#include "queue.h"
 #include "logger.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
@@ -26,8 +28,8 @@
 
 
 
-//In[W] -----> pipe 1 IN[R] 
-//Out[R]<------ pipe 2 Out[W]                 
+//In[W] -----> pipe 1 IN[R]
+//Out[R]<------ pipe 2 Out[W]
 
    enum{
         R=0,
@@ -36,7 +38,7 @@
 
 
 struct filter{
-    int                 in[2]; 
+    int                 in[2];
     int                 out[2];
     pid_t               pid; // pid del proceso creado ej cat
     //char * command;
@@ -84,7 +86,9 @@ struct pop3 {
 
     /* Persisto si origen soporta una lista de capabilities de POP3 */
     capabilities origin_capabilities;
-    
+
+    struct Queue commands_queue;
+
     error_container error_sender;
 
     struct filter filter_data;
@@ -254,6 +258,7 @@ static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info or
 
     struct pop3 * new_pop3 = malloc(sizeof(struct pop3));
     memset(new_pop3, 0, sizeof(struct pop3));
+
     new_pop3->client_fd = client_fd;
     new_pop3->origin_fd = -1;
     new_pop3->read_buffer = buffer_init(buffer_size);
@@ -263,6 +268,8 @@ static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info or
     new_pop3->stm.initial = RESOLVING;
     new_pop3->stm.max_state = ERROR;
     new_pop3->stm.states = client_state_def;
+    new_pop3->commands_queue = create_queue();
+
 
     stm_init(&new_pop3->stm);
     return new_pop3;
@@ -748,7 +755,7 @@ static unsigned copy_r(struct selector_key *key){
     size_t size;
     ssize_t n;
     buffer *b = c->read_b;
-    unsigned ret = COPY; 
+    unsigned ret = COPY;
     //struct filter *f = &ATTACHMENT(key)->filter_data;
     uint8_t *ptr = buffer_write_ptr(b,&size);
     n = recv(key->fd,ptr,size,0);
@@ -787,12 +794,13 @@ static unsigned copy_w(struct selector_key *key){
     buffer *b = c->write_b;
     unsigned ret = COPY; //ESTADO DE RETORNO?
 
+    //Check if im origin
+    if(*c->fd == ATTACHMENT(key)->origin_fd)
 
        //tengo que llamar al filter?
 
     uint8_t *ptr = buffer_read_ptr(b,&size);
-    
- 
+
     n = send(key->fd,ptr,size,MSG_NOSIGNAL);
     if(n==-1){
         shutdown(*c->fd,SHUT_WR);
@@ -806,7 +814,7 @@ static unsigned copy_w(struct selector_key *key){
     }
     copy_interest(key->s,c);
     copy_interest(key->s,c->other);
-    if(c->duplex == OP_NOOP){ //SE CERRARON LOS DOS 
+    if(c->duplex == OP_NOOP){ //SE CERRARON LOS DOS
         ret = DONE;
     }
     return ret;
