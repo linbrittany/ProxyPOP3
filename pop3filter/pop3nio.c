@@ -505,7 +505,7 @@ static unsigned connection_done(struct selector_key * key) {
     }
     else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
         log(INFO, "Connection established for client %d and origin %d\n", proxy_pop3->client_fd, key->fd);
-        return HELLO;
+        return COPY;
     }
     return ERROR;
 }
@@ -792,12 +792,16 @@ static unsigned copy_r(struct selector_key *key){
     unsigned ret = COPY; 
 
 
-    if(*c->fd == ATTACHMENT(key)->client_fd){
-        want_filter(true, key);
-    }
+  
     
     uint8_t *ptr = buffer_write_ptr(b,&size);
     n = recv(key->fd,ptr,size,0);
+
+      if(*c->fd == ATTACHMENT(key)->client_fd){
+        // llamarias al parser
+        want_filter(true, key);
+    }
+
     if(n<=0){
         shutdown(*c->fd,SHUT_RD);
         c->duplex &= -OP_WRITE;
@@ -942,8 +946,8 @@ static void filter_init(struct selector_key *key){
            perror("executing command");
            close(f->in[R]);
            close(f->out[W]);
-           
-           
+           f->in[R] = -1;
+           f->out[W] = -1;
        }
        
 
@@ -1074,6 +1078,7 @@ static void filter_read(struct selector_key *key){
 
   
     if(n==0 || n== -1){
+        //problema con el filter mensaje de 
         shutdown(*c->fd,SHUT_RD);
         c->duplex &= -OP_WRITE;
         //f->duplex[R] &= -OP_WRITE; //chequear
