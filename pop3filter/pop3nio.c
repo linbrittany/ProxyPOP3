@@ -1177,3 +1177,11 @@ static void filter_close(struct selector_key *key) {
 
 static void filter_block(struct selector_key *key) {
 }
+
+void add_dots(buffer buff){
+
+}
+
+void delete_dots(buffer buff){
+    
+}
