@@ -21,6 +21,14 @@ struct proxy_metrics {
     unsigned long bytes_transferred;
 };
 
+struct copy
+{
+    int *fd;
+    buffer *read_b, *write_b;
+    struct copy *other;
+    fd_interest duplex;
+};
+
 struct proxy_args args;
 struct proxy_metrics metrics;
 
