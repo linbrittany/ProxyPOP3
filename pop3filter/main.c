@@ -41,6 +41,7 @@ static void set_up_proxy_args(void) {
     args.listen_pop3_admin_address = "127.0.0.1";
     args.stderr_file_path = "/dev/null";
     args.buffer_size = BUFFER_SIZE;
+    args.admin_credential = "brittu";
 }
 
 static unsigned short port(const char *s) {
