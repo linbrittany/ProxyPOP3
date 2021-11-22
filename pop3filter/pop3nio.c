@@ -416,6 +416,7 @@ static void pop3_done(struct selector_key* key);
 
 static void pop3_read(struct selector_key *key) {
     struct state_machine *stm   = &ATTACHMENT(key)->stm;
+    log(DEBUG, "FILE DESC %d\n",key->fd);
     const enum pop3state st = stm_handler_read(stm, key);
 
     if(ERROR == st || DONE == st) {
@@ -426,7 +427,6 @@ static void pop3_read(struct selector_key *key) {
 static void pop3_write(struct selector_key *key) {
     struct state_machine *stm = &ATTACHMENT(key)->stm;
     const enum pop3state st = stm_handler_write(stm, key);
-
     if(ERROR == st || DONE == st) {
         pop3_done(key);
     }
@@ -552,9 +552,9 @@ static unsigned connection_done(struct selector_key * key) {
         }
         return ERROR;
     }
-    else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
+    else if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy_pop3->client_fd, OP_READ)) { //Setear origin para leer
         log(INFO, "Connection established for client %d and origin %d\n", proxy_pop3->client_fd, key->fd);
-        return HELLO;
+        return COPY;
     }
     return ERROR;
 }
@@ -664,7 +664,7 @@ static unsigned check_capa_read(struct selector_key *key){
         if(capa_parser_done(parser_state,0)) {
             if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->client_fd, OP_READ) &&
                SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)){
-                log(INFO, "Orgin %s pipelining\n", check_capabilities->parser.capa_list->pipelining == true ? "supports" : "does not support");
+                log(INFO, "Origin %s pipelining\n", check_capabilities->parser.capa_list->pipelining == true ? "supports" : "does not support");
                 return COPY;
             }
             else
@@ -827,6 +827,8 @@ static fd_interest copy_interest(fd_selector s, struct copy *c){
 }
 
 static unsigned copy_r(struct selector_key *key){
+
+    log(INFO, "COPY READ%d\n",1);
 
     struct copy *c = copy_ptr(key); 
     assert(*c->fd == key->fd);

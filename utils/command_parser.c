@@ -180,12 +180,11 @@ extern cmd_state cmd_comsume(buffer *b, struct Queue * queue, struct cmd_parser 
     cmd_state st = p->state;
     while(buffer_can_parse(b)) {
         const uint8_t c = buffer_parse(b);
-        printf("Command consume character: %hhu\n", c);
+        log(DEBUG,"PARSED %s", b->parsed);
+        log(DEBUG,"WRITE %s", b->write);
         st = cmd_parser_feed(p, queue, c, new_cmd);
-        if (*new_cmd) { //chequear si hay pipeline
-            break;
-        }
     }
+    buffer_parse_reset(b);
     return st;
 }
 
