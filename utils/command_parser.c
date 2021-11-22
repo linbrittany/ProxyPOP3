@@ -55,7 +55,6 @@ void cmd_init(struct st_command * cmd) {
 
 extern cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue *queue, const uint8_t b, bool * new_cmd) {
     struct st_command * command_info = &parser->current_cmd;
-    
 
     if (parser->length == 0) {
         cmd_init(command_info);
@@ -120,7 +119,6 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue *queue
                         ((uint8_t *)command_info->arg)[parser->arg_len - 1] = b;
                     }
                     parser->arg_len++;
-                    log(DEBUG, "EL VALOR DEL PARSER PARA BRITU %ld\n", parser->arg_len);
                 }
             } else if (b == crlf_msg[0]) {
                 if (parser->arg_len > 1) {
