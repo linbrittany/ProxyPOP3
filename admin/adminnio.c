@@ -34,17 +34,18 @@ typedef struct command_action {
 } command_action;
 
 void get_buffer_size(char buffer []);
+status_code set_buffer_size(char * arg, char buffer []);
 
 command_action commands[COMMANDS_QTY] = {
-    {.command = "stats"         , .args_qty = 0, .function = {&get_buffer_size}},
-    {.command = "get_buff_size" , .args_qty = 0, .function = {&get_buffer_size}},
-    {.command = "set_buff_size" , .args_qty = 1, .function = {&get_buffer_size}},
-    {.command = "get_timeout"   , .args_qty = 0, .function = {&get_buffer_size}},
-    {.command = "set_timeout"   , .args_qty = 1, .function = {&get_buffer_size}},
-    {.command = "get_error_file", .args_qty = 0, .function = {&get_buffer_size}},
-    {.command = "set_error_file", .args_qty = 1, .function = {&get_buffer_size}},
-    {.command = "get_filter"    , .args_qty = 0, .function = {&get_buffer_size}},
-    {.command = "set_filter"    , .args_qty = 1, .function = {&get_buffer_size}},
+    {.command = "stats"         , .args_qty = 0, .function = {.getter = &get_buffer_size}},
+    {.command = "get_buff_size" , .args_qty = 0, .function = {.getter = &get_buffer_size}},
+    {.command = "set_buff_size" , .args_qty = 1, .function = {.setter = &set_buffer_size}},
+    {.command = "get_timeout"   , .args_qty = 0, .function = {.getter = &get_buffer_size}},
+    {.command = "set_timeout"   , .args_qty = 1, .function = {.getter = &get_buffer_size}},
+    {.command = "get_error_file", .args_qty = 0, .function = {.getter = &get_buffer_size}},
+    {.command = "set_error_file", .args_qty = 1, .function = {.getter = &get_buffer_size}},
+    {.command = "get_filter"    , .args_qty = 0, .function = {.getter = &get_buffer_size}},
+    {.command = "set_filter"    , .args_qty = 1, .function = {.getter = &get_buffer_size}},
 };
 
 void admin_passive_accept(struct selector_key *key) {
@@ -56,10 +57,17 @@ void admin_passive_accept(struct selector_key *key) {
     if (buffer[n-1] == '\n') // Por si lo estan probando con netcat, en modo interactivo
 		n--;
 	buffer[n] = '\0';
-	log(DEBUG, "UDP received:%s", buffer);
+	log(INFO, "UDP received:%s", buffer);
 
     char to_ret[BUFFER_MAX_SIZE] = {0};
-    parse(buffer, to_ret);
+    int cmd = 0 ;
+    cmd = parse(buffer, to_ret);
+    if (cmd < 0) return;
+    if (commands[cmd].function.setter!= NULL) {
+        commands[cmd].function.setter(buffer,to_ret);
+    } else {
+        commands[cmd].function.getter(buffer);
+    }
 
     return;
 }
@@ -68,7 +76,7 @@ void admin_passive_accept(struct selector_key *key) {
 int parse (char *buffer, char to_ret []) { 
     const char s[2] = " ";
     char *token;
-    size_t token_count = 1;
+    size_t token_count = 0;
     int command_index = -1;
 
     char *credToken = args.admin_credential;
@@ -101,6 +109,7 @@ int parse (char *buffer, char to_ret []) {
     while (token != NULL) {
         token_count++;
         if (token_count > commands[command_index].args_qty) {
+            sprintf(to_ret,"INVALID ARGS");
             return -1;
         }
         token = strtok(NULL, s);
@@ -110,7 +119,13 @@ int parse (char *buffer, char to_ret []) {
 }
 
 status_code set_buffer_size(char * arg, char buffer []) {
-    int new_size = atoi(arg);
+    const char s[2] = " ";
+    char *token;
+    token = strtok(buffer,s);
+    token = strtok(NULL, s);
+    token = strtok(NULL, s);
+
+    int new_size = atoi(token);
     if (new_size < 0) {
         return INVALID_ARGUMENT;
     }
