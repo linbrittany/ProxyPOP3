@@ -844,12 +844,11 @@ static unsigned copy_w(struct selector_key *key){
     ssize_t n;
     buffer *b = c->write_b;
     unsigned ret = COPY; //ESTADO DE RETORNO?
-    bool papa = false;
 
     if (*c->fd == proxy->origin_fd) {
         bool new_cmd = false;
         struct cmd_parser * parser = &proxy->command_parser;
-        cmd_consume(b, parser, &new_cmd);
+        cmd_comsume(b, proxy->commands_queue, parser, &new_cmd);
         printf("BUFFER COMMAND %s\n", b->read);
         bool filter = parser->current_cmd.type == CMD_RETR || parser->current_cmd.type == CMD_TOP;
         log(INFO, "Command type %d\n", parser->current_cmd.type);

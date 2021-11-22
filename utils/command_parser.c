@@ -70,7 +70,7 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue *queue
         case CMD_TYPE:
             if (b == crlf_msg[1]) {
                 parser->state = CMD_ERROR;
-                handle_cmd(parser, command_info, new_cmd);
+                handle_cmd(parser, command_info, queue, new_cmd);
             }
             else {
                 for (int i = 0 ; i < CMD_QTY ; i++) {
