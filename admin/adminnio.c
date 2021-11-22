@@ -13,7 +13,6 @@
 
 extern struct proxy_args args;
 
-// gasti
 int parse(char *buffer, char to_ret []);
 
 typedef enum status_code{
@@ -36,7 +35,6 @@ typedef struct command_action {
 
 void get_buffer_size(char buffer []);
 
-// pushea gasti
 command_action commands[COMMANDS_QTY] = {
     {.command = "stats"         , .args_qty = 0, .function = {&get_buffer_size}},
     {.command = "get_buff_size" , .args_qty = 0, .function = {&get_buffer_size}},
@@ -48,7 +46,6 @@ command_action commands[COMMANDS_QTY] = {
     {.command = "get_filter"    , .args_qty = 0, .function = {&get_buffer_size}},
     {.command = "set_filter"    , .args_qty = 1, .function = {&get_buffer_size}},
 };
-// 
 
 void admin_passive_accept(struct selector_key *key) {
     char buffer[BUFFER_MAX_SIZE] = {0};
