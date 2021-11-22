@@ -93,7 +93,7 @@ struct pop3 {
     /* Persisto si origen soporta una lista de capabilities de POP3 */
     capabilities origin_capabilities;
 
-    struct Queue * commands_queue;
+    struct Queue* commands_queue;
 
     error_container error_sender;
 
@@ -616,8 +616,10 @@ static unsigned hello_write(struct selector_key * key) {
     else {
         if (hello_is_done(hello->parser.state, 0)) {
             if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_WRITE) &&
-               SELECTOR_SUCCESS == selector_set_interest_key(key, OP_NOOP))
+               SELECTOR_SUCCESS == selector_set_interest_key(key, OP_NOOP)){
+                   buffer_read_adv(buff, n);
                 return CHECK_CAPABILITIES;
+               } 
             else
                 return ERROR;
         }
@@ -878,12 +880,14 @@ static unsigned copy_w(struct selector_key *key){
     ssize_t n;
     buffer *b = c->write_b;
     unsigned ret = COPY; //ESTADO DE RETORNO?
-
-       //tengo que llamar al filter?
-
-    //Check if im origin
-    if(*c->fd == ATTACHMENT(key)->origin_fd){
-        
+    struct pop3 * proxy = ATTACHMENT(key);
+    if (*c->fd == proxy->origin_fd) {
+        bool new_cmd = false;
+        struct cmd_parser * parser = &proxy->command_parser;
+        cmd_comsume(b, proxy->commands_queue, parser, &new_cmd);
+        bool filter = parser->current_cmd.type == CMD_RETR || parser->current_cmd.type == CMD_TOP;
+        log(INFO, "Command type %d\n", parser->current_cmd.type);
+        want_filter(filter, key);
     }
 
     uint8_t *  ptr = buffer_read_ptr(b,&size);

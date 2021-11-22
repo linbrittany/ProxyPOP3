@@ -22,7 +22,7 @@ struct rsp_parser {
 };
 
 void rsp_parser_init(struct rsp_parser * parser);
-enum rsp_state rsp_parser_feed (struct rsp_parser * parser, const uint8_t b, struct st_command * command);
-enum rsp_state rsp_consume(buffer *b, struct rsp_parser *p, bool *errored);
+enum rsp_state rsp_parser_feed(struct rsp_parser * parser, const uint8_t b, struct Queue * queue);
+enum rsp_state rsp_consume(buffer *b, struct rsp_parser *p, struct Queue *queue, bool *errored);
 
 #endif
