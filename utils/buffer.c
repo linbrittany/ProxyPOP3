@@ -70,9 +70,9 @@ inline void buffer_parse_adv(buffer *b, const ssize_t bytes) {
     if (bytes > -1) {
         b->parsed += (size_t) bytes;
         assert(b->parsed <= b->write);
-        if (b->parsed == b->write) {
-            b->parsed = b->data;
-        }
+        // if (b->parsed == b->write) {
+        //     b->parsed = b->data;
+        // }
     }
 }
 
@@ -125,4 +125,10 @@ void buffer_delete(buffer *b) {
     }
     free(b->data);
     free(b);
+}
+
+void buffer_parse_reset(buffer *b){
+    if(b->parsed == b->write)
+        b->parsed = b->data;
+    return;
 }

@@ -11,6 +11,7 @@
 #define MAX_ARG_SIZE 40
 
 static const char * crlf_msg = "\r\n";
+static const size_t crlf_msg_size = 2;
 
 struct command_info {
     cmd_type type;
@@ -81,6 +82,7 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue *queue
                         }
                         else if (parser->length == user_commands[i].len - 1) {
                             command_info->type = user_commands[i].type;
+                            parser->arg_len = 0;
                             if (user_commands[i].max_args > 0) {
                                 parser->state = CMD_ARGS;
                                 if (command_info->type == CMD_USER || command_info->type == CMD_APOP) {
@@ -114,10 +116,11 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue *queue
                     parser->state = CMD_ERROR;
                 }
                 else {
-                    parser->arg_len++;
                     if (command_info->type == CMD_USER || command_info->type == CMD_APOP) {
                         ((uint8_t *)command_info->arg)[parser->arg_len - 1] = b;
                     }
+                    parser->arg_len++;
+                    log(DEBUG, "EL VALOR DEL PARSER PARA BRITU %ld\n", parser->arg_len);
                 }
             } else if (b == crlf_msg[0]) {
                 if (parser->arg_len > 1) {
@@ -128,6 +131,7 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue *queue
                 }
                 if (parser->arg_qty <= user_commands[parser->current_cmd.type].max_args && parser->arg_qty >= user_commands[parser->current_cmd.type].min_args) {
                     parser->state = CMD_CRLF;
+                    parser->arg_len = 1;
                 }
                 else {
                     parser->state = CMD_ERROR;
@@ -152,8 +156,10 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue *queue
             }
             break;
         case CMD_CRLF: 
-            if (b == crlf_msg[1]) {
-                handle_cmd(parser, command_info, queue, new_cmd);
+            if (b == crlf_msg[parser->arg_len]) {
+                if (parser->arg_len++ == crlf_msg_size - 1) {
+                    handle_cmd(parser, command_info, queue, new_cmd);
+                }
             }
             else {
                 parser->state = CMD_ERROR;
@@ -180,12 +186,10 @@ extern cmd_state cmd_comsume(buffer *b, struct Queue * queue, struct cmd_parser 
     cmd_state st = p->state;
     while(buffer_can_parse(b)) {
         const uint8_t c = buffer_parse(b);
-        printf("Command consume character: %hhu\n", c);
+        log(DEBUG, "LA B : %c\n",c);
         st = cmd_parser_feed(p, queue, c, new_cmd);
-        if (*new_cmd) { //chequear si hay pipeline
-            break;
-        }
     }
+    buffer_parse_reset(b);
     return st;
 }
 
@@ -203,6 +207,7 @@ static bool is_multiline(struct st_command *command, size_t arg_qty) {
 }
 
 void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, struct Queue *queue, bool * new_cmd) {
+    struct st_command *cmd_copy = malloc(sizeof(struct st_command *));
     if (p->state == CMD_ERROR) {
         current_cmd->type = CMD_OTHER;
         if (current_cmd->arg != NULL) {
@@ -211,8 +216,9 @@ void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, struct Que
         }
     }
     current_cmd->is_multiline = is_multiline(current_cmd, p->arg_qty);
+    memcpy(cmd_copy,current_cmd,sizeof(struct st_command));
     //agregar a cola
-    enqueue(queue,current_cmd);
+    enqueue(queue,cmd_copy);
     *new_cmd = true;
     p->state = CMD_TYPE;
     p->length = -1;

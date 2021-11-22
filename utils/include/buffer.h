@@ -157,4 +157,6 @@ bool buffer_can_parse(buffer *b);
 
 void buffer_delete(buffer *b);
 
+void buffer_parse_reset(buffer *b);
+
 #endif
