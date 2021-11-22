@@ -23,25 +23,30 @@ typedef enum status_code{
     UNSUPPORTED_COMMAND = 102,
 } status_code;
 
+typedef union {
+    void (*getter) (char buffer[]);
+    status_code (*setter) (char *arg,char buffer[]);
+}func;
+
 typedef struct command_action {
     char * command;
     size_t args_qty;
-    void (*func) (char buffer[]);
+    func function;
 } command_action;
 
 void get_buffer_size(char buffer []);
 
 // pushea gasti
 command_action commands[COMMANDS_QTY] = {
-    {.command = "stats"         , .args_qty = 0, .func = &get_buffer_size},
-    {.command = "get_buff_size" , .args_qty = 0, .func = &get_buffer_size},
-    {.command = "set_buff_size" , .args_qty = 1, .func = &get_buffer_size},
-    {.command = "get_timeout"   , .args_qty = 0, .func = &get_buffer_size},
-    {.command = "set_timeout"   , .args_qty = 1, .func = &get_buffer_size},
-    {.command = "get_error_file", .args_qty = 0, .func = &get_buffer_size},
-    {.command = "set_error_file", .args_qty = 1, .func = &get_buffer_size},
-    {.command = "get_filter"    , .args_qty = 0, .func = &get_buffer_size},
-    {.command = "set_filter"    , .args_qty = 1, .func = &get_buffer_size},
+    {.command = "stats"         , .args_qty = 0, .function = {&get_buffer_size}},
+    {.command = "get_buff_size" , .args_qty = 0, .function = {&get_buffer_size}},
+    {.command = "set_buff_size" , .args_qty = 1, .function = {&get_buffer_size}},
+    {.command = "get_timeout"   , .args_qty = 0, .function = {&get_buffer_size}},
+    {.command = "set_timeout"   , .args_qty = 1, .function = {&get_buffer_size}},
+    {.command = "get_error_file", .args_qty = 0, .function = {&get_buffer_size}},
+    {.command = "set_error_file", .args_qty = 1, .function = {&get_buffer_size}},
+    {.command = "get_filter"    , .args_qty = 0, .function = {&get_buffer_size}},
+    {.command = "set_filter"    , .args_qty = 1, .function = {&get_buffer_size}},
 };
 // 
 
@@ -107,7 +112,6 @@ int parse (char *buffer, char to_ret []) {
     return command_index;
 }
 
-// gasti 
 status_code set_buffer_size(char * arg, char buffer []) {
     int new_size = atoi(arg);
     if (new_size < 0) {
@@ -118,8 +122,7 @@ status_code set_buffer_size(char * arg, char buffer []) {
     return OK_RESPONSE;
 }
 
-// gasti <3
-// TODO return void?
+
 void get_buffer_size(char buffer []) {
     sprintf(buffer, "Buffer size value: %zu", args.buffer_size);
 }
