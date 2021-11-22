@@ -70,7 +70,6 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, const uint8_t b, bo
             if (b == crlf_msg[1]) {
                 parser->state = CMD_ERROR;
                 handle_cmd(parser, command_info, new_cmd);
-                break;
             }
             else {
                 for (int i = 0 ; i < CMD_QTY ; i++) {
@@ -176,10 +175,11 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, const uint8_t b, bo
     return parser->state;
 }
 
-extern cmd_state cmd_comsume(buffer *b, struct cmd_parser *p, bool * new_cmd) {
+extern cmd_state cmd_consume(buffer *b, struct cmd_parser *p, bool * new_cmd) {
     cmd_state st = p->state;
     while(buffer_can_parse(b)) {
         const uint8_t c = buffer_parse(b);
+        printf("Command consume character: %hhu\n", c);
         st = cmd_parser_feed(p, c, new_cmd);
         if (*new_cmd) { //chequear si hay pipeline
             break;
