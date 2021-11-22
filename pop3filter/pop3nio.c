@@ -849,7 +849,6 @@ static unsigned copy_w(struct selector_key *key){
         bool new_cmd = false;
         struct cmd_parser * parser = &proxy->command_parser;
         cmd_consume(b, parser, &new_cmd);
-        printf("BUFFER COMMAND %s\n", b->read);
         bool filter = parser->current_cmd.type == CMD_RETR || parser->current_cmd.type == CMD_TOP;
         log(INFO, "Command type %d\n", parser->current_cmd.type);
         want_filter(filter, key);
@@ -859,7 +858,7 @@ static unsigned copy_w(struct selector_key *key){
     n = send(key->fd, ptr, size, MSG_NOSIGNAL);
 
     if (n == -1) {
-        shutdown(*c->fd,SHUT_WR);
+        shutdown(*c->fd, SHUT_WR);
         c->duplex &= -OP_WRITE;
         if (*c->other->fd != -1) {
             shutdown(*c->other->fd,SHUT_RD);

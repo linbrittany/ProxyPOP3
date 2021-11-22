@@ -28,13 +28,13 @@ static const struct command_info user_commands[] = {
     } , {
         .type = CMD_APOP, .command = "APOP", .len = 4, .max_args = 2, .min_args = 2
     } , {
-        .type = CMD_LIST, .command = "LIST", .len = 4, .max_args = 0, .min_args = 1
+        .type = CMD_LIST, .command = "LIST", .len = 4, .max_args = 1, .min_args = 0
     } , {
         .type = CMD_RETR, .command = "RETR", .len = 4, .max_args = 1, .min_args = 1
     } , {
         .type = CMD_TOP, .command = "TOP", .len = 3, .max_args = 2, .min_args = 2
     } , {
-        .type = CMD_UIDL, .command = "UIDL", .len = 4, .max_args = 0, .min_args = 1
+        .type = CMD_UIDL, .command = "UIDL", .len = 4, .max_args = 1, .min_args = 0
     } , {
         .type = CMD_CAPA, .command = "CAPA", .len = 4, .max_args = 0, .min_args = 0
     }
@@ -213,5 +213,5 @@ void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, bool * new
     //agregar a cola
     *new_cmd = true;
     p->state = CMD_TYPE;
-    p->length = 0;
+    p->length = -1;
 }
