@@ -14,7 +14,7 @@
 extern struct proxy_args args;
 
 // gasti
-int parse(char *buffer);
+int parse(char *buffer, char to_ret []);
 
 typedef enum status_code{
     OK_RESPONSE         = 200,
@@ -51,48 +51,54 @@ void admin_passive_accept(struct selector_key *key) {
     struct sockaddr_in6 clntAddr;
 
     n = recvfrom(key->fd, buffer, BUFFER_MAX_SIZE, 0, (struct sockaddr *) &clntAddr, &len);
-    if ( buffer[n-1] == '\n') // Por si lo estan probando con netcat, en modo interactivo
+    if (buffer[n-1] == '\n') // Por si lo estan probando con netcat, en modo interactivo
 		n--;
 	buffer[n] = '\0';
 	log(DEBUG, "UDP received:%s", buffer);
+
+    char to_ret[BUFFER_MAX_SIZE] = {0};
+    parse(buffer, to_ret);
 
     return;
 }
 
 // pushea gasti
-int parse(char *buffer) {
-    // TODO buffer cmp contra admin token 
+int parse (char *buffer, char to_ret []) { 
     const char s[2] = " ";
     char *token;
-
+    size_t token_count = 1;
     int command_index = -1;
 
     char *credToken = args.admin_credential;
 
     token = strtok(buffer,s);
-
-    if ( strcmp(credToken,token) != 0 ) {
+    if (strcmp(credToken, token) != 0 ) {
+        sprintf(to_ret, "Please enter valid token\n");
         return -1;
     }
 
-    // TODO buffer cmp conntra commandos
     token = strtok(NULL, s);
+    if (token == NULL) {
+        sprintf(to_ret, "Please enter command\n");
+        return -1;
+    }
 
     for (int i = 0 ; i < COMMANDS_QTY ; i++) {
-        if ( strcmp(credToken,token) == 0 ) {
+        if (strcmp(commands[i].command, token) == 0 ) {
             command_index = i;
             break;
         }
     }
-    if (command_index == -1)
+
+    if (command_index == -1) {
+        sprintf(to_ret, "Please enter command\n");
         return command_index;
+    }
 
-    // TODO validar args_qty
-
-    size_t args_qty = 0;
     token = strtok(NULL, s);
-    while ( token != NULL ) {
-        if ( args_qty > commands[command_index].args_qty ) {
+    while (token != NULL) {
+        token_count++;
+        if (token_count > commands[command_index].args_qty) {
             return -1;
         }
         token = strtok(NULL, s);
@@ -108,14 +114,14 @@ status_code set_buffer_size(char * arg, char buffer []) {
         return INVALID_ARGUMENT;
     }
     args.buffer_size = new_size;
-    sprintf(buffer,"new size set to: %d", new_size);
+    sprintf(buffer,"New buffer size set to: %d", new_size);
     return OK_RESPONSE;
 }
 
 // gasti <3
 // TODO return void?
 void get_buffer_size(char buffer []) {
-    sprintf(buffer,"Buffer size value: %zu",args.buffer_size);
+    sprintf(buffer, "Buffer size value: %zu", args.buffer_size);
 }
 
 // status_code set_timeout(char *arg, char buffer[]) {

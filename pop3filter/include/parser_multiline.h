@@ -1,4 +1,3 @@
-
 #ifndef PARSER_MULTILINE_H
 #define PARSER_MULTILINE_H
 #include "buffer.h"

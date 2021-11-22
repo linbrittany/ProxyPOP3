@@ -802,8 +802,6 @@ static void want_filter(bool filter, struct selector_key * key){
 
 }
 
-
-
 static fd_interest copy_interest(fd_selector s, struct copy *c){ 
     fd_interest ret = OP_NOOP;
     if((c->duplex & OP_READ) && buffer_can_write(c->read_b)){
@@ -829,19 +827,12 @@ static unsigned copy_r(struct selector_key *key){
     buffer *b = c->read_b;
     unsigned ret = COPY; 
 
-
-  
-    
     uint8_t *ptr = buffer_write_ptr(b,&size);
     n = recv(key->fd,ptr,size,0);
-      printf("HOLAA   %ld",n);
-        fflush(stdout);
-      if(*c->fd == ATTACHMENT(key)->client_fd){
+    if(*c->fd == ATTACHMENT(key)->client_fd){
         // llamarias al parser
         want_filter(true, key);
     }
-
-
 
     if(n<=0){
         shutdown(*c->fd,SHUT_RD);
@@ -883,7 +874,6 @@ static unsigned copy_w(struct selector_key *key){
         struct cmd_parser * parser = &proxy->command_parser;
         cmd_comsume(b, proxy->commands_queue, parser, &new_cmd);
         bool filter = parser->current_cmd.type == CMD_RETR || parser->current_cmd.type == CMD_TOP;
-      
         log(INFO, "Command type %d\n", parser->current_cmd.type);
         want_filter(filter, key);
     }
@@ -919,7 +909,6 @@ static unsigned write_error_msg(struct selector_key * key) {
     if(proxy->error_sender.message_length == 0)
         proxy->error_sender.message_length = strlen(proxy->error_sender.message);
         
-    // logDebg("Enviando error: %s", proxy->error_sender.message);
     char *   ptr  = proxy->error_sender.message + proxy->error_sender.sended_size;
     ssize_t  size = proxy->error_sender.message_length - proxy->error_sender.sended_size;
     ssize_t  n    = send(proxy->client_fd, ptr, size, MSG_NOSIGNAL);
@@ -936,16 +925,12 @@ static unsigned write_error_msg(struct selector_key * key) {
 
 //filter
 
-
-
 static void set_variables(struct pop3 * pop3_struct){
-
     setenv("POP3FILTER_VERSION", "0.0.0.0", 1);//cambiar la version
     setenv("POP3_SERVER", pop3_struct->origin_addr_data.addr.fqdn, 1);//todo revisar
 }
 
-
- static const struct fd_handler filter_handler = {
+static const struct fd_handler filter_handler = {
     .handle_read   = filter_read,
     .handle_write  = filter_write,
     .handle_close  = filter_close,
