@@ -93,7 +93,7 @@ struct pop3 {
     /* Persisto si origen soporta una lista de capabilities de POP3 */
     capabilities origin_capabilities;
 
-    struct Queue * commands_queue;
+    struct Queue* commands_queue;
 
     error_container error_sender;
 

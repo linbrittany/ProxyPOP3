@@ -4,8 +4,8 @@
 #include <string.h>
 
 #include "response_parser.h"
-#include "buffer.h"
 #include "logger.h"
+#include "queue.h"
 
 #define MAX_RSP_SIZE 512
 
@@ -24,8 +24,8 @@ void rsp_parser_init(struct rsp_parser * parser) {
     parser->line_size = 0;
 }
 
-extern enum rsp_state rsp_parser_feed (struct rsp_parser * parser, const uint8_t b, struct st_command * command) {
-    struct st_command * current_cmd = command;
+extern enum rsp_state rsp_parser_feed(struct rsp_parser * parser, const uint8_t b, struct Queue * queue) {
+    struct st_command * current_cmd = dequeue(queue);
     switch (parser->state) {
         case RSP_INIT:
             if (b == ok_indicator[parser->line_size]) {
@@ -69,7 +69,7 @@ extern enum rsp_state rsp_parser_feed (struct rsp_parser * parser, const uint8_t
         case RSP_CRLF_INLINE:
             if (b == crlf_inline[parser->check_crlf++]) {
                 if (parser->check_crlf == crlf_inline_size) {
-                    if (command->is_multiline) {
+                    if (current_cmd->is_multiline) {
                         parser->state = RSP_BODY;
                         parser->line_size = 0;
                     }
@@ -120,12 +120,11 @@ extern enum rsp_state rsp_parser_feed (struct rsp_parser * parser, const uint8_t
     return parser->state;
 }
 
-extern enum rsp_state rsp_consume(buffer *b, struct rsp_parser *p, bool *errored) {
+extern enum rsp_state rsp_consume(buffer *b, struct rsp_parser *p, struct Queue *queue, bool *errored) {
     enum rsp_state st = p->state;
     while(buffer_can_parse(b)) {
         const uint8_t c = buffer_parse(b);
-        struct st_command * command = malloc(sizeof(struct st_command));
-        st = rsp_parser_feed(p, c, command);
+        st = rsp_parser_feed(p, c, queue);
         if (p->state == RSP_ERROR) {
             *errored = true;
             break;
