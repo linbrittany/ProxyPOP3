@@ -552,9 +552,9 @@ static unsigned connection_done(struct selector_key * key) {
         }
         return ERROR;
     }
-    else if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy_pop3->client_fd, OP_READ)) { //Setear origin para leer
+    else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
         log(INFO, "Connection established for client %d and origin %d\n", proxy_pop3->client_fd, key->fd);
-        return COPY;
+        return HELLO;
     }
     return ERROR;
 }
@@ -855,7 +855,8 @@ static unsigned copy_w(struct selector_key *key){
         struct cmd_parser * parser = &proxy->command_parser;
         cmd_comsume(b, proxy->commands_queue, parser, &new_cmd);
         bool filter = parser->current_cmd.type == CMD_RETR || parser->current_cmd.type == CMD_TOP;
-        log(INFO, "Command type %d\n", parser->current_cmd.type);
+        log(INFO, "Command type %d\n", ((struct st_command *)dequeue(proxy->commands_queue))->type);
+        log(INFO, "Command type 2 %d\n", ((struct st_command *)dequeue(proxy->commands_queue))->type);
         want_filter(filter, key);
     }
 
