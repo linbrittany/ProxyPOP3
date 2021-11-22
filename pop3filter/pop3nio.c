@@ -890,13 +890,8 @@ static unsigned copy_w(struct selector_key *key){
 
     uint8_t *  ptr = buffer_read_ptr(b,&size);
 
-<<<<<<< HEAD
     n = send(key->fd,ptr,size,MSG_NOSIGNAL);
     if(n==-1){
-=======
-    n = send(key->fd, ptr, size, MSG_NOSIGNAL);
-    if (n == -1) {
->>>>>>> d681d43a6a24d62977efe4f2bb2fff2e7e3654a3
         shutdown(*c->fd,SHUT_WR);
         c->duplex &= -OP_WRITE;
         if(*c->other->fd!=-1){
