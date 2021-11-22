@@ -89,7 +89,7 @@ struct pop3 {
     /* Persisto si origen soporta una lista de capabilities de POP3 */
     capabilities origin_capabilities;
 
-    struct Queue commands_queue;
+    struct Queue* commands_queue;
 
     error_container error_sender;
 
@@ -864,21 +864,25 @@ static unsigned copy_r(struct selector_key *key){
 }
 
 static unsigned copy_w(struct selector_key *key){
+    struct pop3 * proxy = ATTACHMENT(key);
     struct copy *c = copy_ptr(key); 
     assert(*c->fd == key->fd);
     size_t size;
     ssize_t n;
     buffer *b = c->write_b;
     unsigned ret = COPY; //ESTADO DE RETORNO?
+    bool papa = false;
 
-    //Check if im origin
-    if(*c->fd == ATTACHMENT(key)->origin_fd)
-
+    //Chequeo si le estoy enviando al origen
+    if(key->fd == proxy->origin_fd){
+        cmd_comsume(b, proxy->commands_queue, &proxy->command_parser,&papa);
        //tengo que llamar al filter?
-
+        log(DEBUG, "SALI DEL CONSUME%d\n",1);
+    }
     uint8_t *ptr = buffer_read_ptr(b,&size);
 
     n = send(key->fd,ptr,size,MSG_NOSIGNAL);
+    log(DEBUG, "SALI DEL SEND %ld mande: %s\n",n,ptr);
     if(n==-1){
         shutdown(*c->fd,SHUT_WR);
         c->duplex &= -OP_WRITE;

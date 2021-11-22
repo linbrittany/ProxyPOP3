@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "buffer.h"
+#include "queue.h"
 
 #define CMD_QTY 8
 
@@ -45,8 +46,8 @@ struct cmd_parser {
 
 void cmd_parser_init(struct cmd_parser * parser);
 void cmd_init(struct st_command * cmd);
-cmd_state cmd_parser_feed(struct cmd_parser * parser, const uint8_t b, bool * new_cmd);
-cmd_state cmd_comsume(buffer *b, struct cmd_parser *p, bool * new_cmd);
-void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, bool * new_cmd);
+cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue * queue, const uint8_t b, bool * new_cmd);
+cmd_state cmd_comsume(buffer *b, struct Queue * queue, struct cmd_parser *p, bool * new_cmd);
+void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, struct Queue *queue, bool * new_cmd);
 
 #endif

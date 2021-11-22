@@ -4,8 +4,8 @@
 #include <string.h>
 
 #include "command_parser.h"
-#include "buffer.h"
 #include "logger.h"
+#include "queue.h"
 
 #define MAX_CMD_SIZE 512
 #define MAX_ARG_SIZE 40
@@ -52,9 +52,10 @@ void cmd_init(struct st_command * cmd) {
     cmd->arg = NULL;
 }
 
-extern cmd_state cmd_parser_feed(struct cmd_parser * parser, const uint8_t b, bool * new_cmd) {
+extern cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue *queue, const uint8_t b, bool * new_cmd) {
     struct st_command * command_info = &parser->current_cmd;
     
+
     if (parser->length == 0) {
         cmd_init(command_info);
         parser->arg_qty = 0; //vuelvo a setear a cero
@@ -69,7 +70,7 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, const uint8_t b, bo
         case CMD_TYPE:
             if (b == crlf_msg[1]) {
                 parser->state = CMD_ERROR;
-                handle_cmd(parser, command_info, new_cmd);
+                handle_cmd(parser, command_info, queue, new_cmd);
                 break;
             }
             else {
@@ -140,11 +141,11 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, const uint8_t b, bo
                     parser->arg_qty++;
                 }
                 if (parser->arg_qty <= user_commands[parser->current_cmd.type].max_args && parser->arg_qty >= user_commands[parser->current_cmd.type].min_args) {
-                    handle_cmd(parser, command_info, new_cmd);
+                    handle_cmd(parser, command_info, queue, new_cmd);
                 }
                 else {
                     parser->state = CMD_ERROR;
-                    handle_cmd(parser, command_info, new_cmd);
+                    handle_cmd(parser, command_info, queue, new_cmd);
                 }
             }
             else {
@@ -153,7 +154,7 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, const uint8_t b, bo
             break;
         case CMD_CRLF: 
             if (b == crlf_msg[1]) {
-                handle_cmd(parser, command_info, new_cmd);
+                handle_cmd(parser, command_info, queue, new_cmd);
             }
             else {
                 parser->state = CMD_ERROR;
@@ -161,7 +162,7 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, const uint8_t b, bo
             break;
         case CMD_ERROR: {
             if (b == crlf_msg[1]) {
-                handle_cmd(parser, command_info, new_cmd);
+                handle_cmd(parser, command_info,queue, new_cmd);
             }
             break;
         }
@@ -176,11 +177,11 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, const uint8_t b, bo
     return parser->state;
 }
 
-extern cmd_state cmd_comsume(buffer *b, struct cmd_parser *p, bool * new_cmd) {
+extern cmd_state cmd_comsume(buffer *b, struct Queue * queue, struct cmd_parser *p, bool * new_cmd) {
     cmd_state st = p->state;
     while(buffer_can_parse(b)) {
         const uint8_t c = buffer_parse(b);
-        st = cmd_parser_feed(p, c, new_cmd);
+        st = cmd_parser_feed(p, queue, c, new_cmd);
         if (*new_cmd) { //chequear si hay pipeline
             break;
         }
@@ -201,16 +202,17 @@ static bool is_multiline(struct st_command *command, size_t arg_qty) {
     return command->type == CMD_CAPA;
 }
 
-void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, bool * new_cmd) {
+void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, struct Queue *queue, bool * new_cmd) {
     if (p->state == CMD_ERROR) {
         current_cmd->type = CMD_OTHER;
         if (current_cmd->arg != NULL) {
             free(current_cmd->arg);
             current_cmd->arg = NULL;
-        }    
+        }
     }
     current_cmd->is_multiline = is_multiline(current_cmd, p->arg_qty);
     //agregar a cola
+    enqueue(queue,current_cmd);
     *new_cmd = true;
     p->state = CMD_TYPE;
     p->length = 0;
