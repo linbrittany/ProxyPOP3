@@ -81,7 +81,7 @@ void admin_passive_accept(struct selector_key *key) {
 
     // log(DEBUG,"EXECUTED %d\n",cmd);
 
-    ssize_t sendBytes = sendto(key->fd, to_ret, strlen(to_ret), 0, (const struct sockaddr *) &clntAddr, len);
+    sendto(key->fd, to_ret, strlen(to_ret), 0, (const struct sockaddr *) &clntAddr, len);
 
 
     // log(DEBUG,"EXECUTED %s %zd\n",to_ret,sendBytes);
