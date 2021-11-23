@@ -175,7 +175,7 @@ status_code set_error_file(char * arg, char to_ret[]) {
         return INVALID_ARGUMENT;
     }
     fclose(file);
-    args.stderr_file_path = calloc(strlen(arg+advance)+1,sizeof(char)); //TODO FREE ? 
+    args.stderr_file_path = calloc(strlen(arg+advance)+1,sizeof(char)); //TODO FREE In after when all close add variable to know if need free
     memcpy(args.stderr_file_path,arg+advance,strlen(arg+advance));
     sprintf(to_ret,"New error file is: %s\n",arg+advance);
     return OK_RESPONSE;
