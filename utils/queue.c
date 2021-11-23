@@ -16,12 +16,28 @@ struct Queue {
 };
 
 // A utility function to create a new linked list node.
-struct QNode* newNode(void *data)
+struct QNode* new_node(void *data)
 {
     struct QNode* temp = (struct QNode*)malloc(sizeof(struct QNode));
     temp->data = data;
     temp->next = NULL;
     return temp;
+}
+
+int queue_size(struct Queue * queue){
+    if(queue->front == NULL)
+        return 0;
+    struct QNode* temp = queue->front;
+    int i = 1;
+    while(temp->next != NULL){
+        i++;
+        temp = temp->next;
+    }
+    return i;
+}
+
+int queue_is_empty(struct Queue * queue){
+    return queue->front == NULL;
 }
 // A utility function to create an empty queue
 struct Queue* create_queue()
@@ -34,10 +50,11 @@ struct Queue* create_queue()
 void enqueue(struct Queue* q, void *data)
 {
     // Create a new LL node
-    struct QNode* temp = newNode(data);
+    struct QNode* temp = new_node(data);
     // If queue is empty, then new node is front and rear both
     if (q->rear == NULL) {
-        q->front = q->rear = temp;
+        q->front =temp;
+        q->rear = temp;
         return;
     }
     // Add the new node at the end of queue and change rear

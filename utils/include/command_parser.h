@@ -31,6 +31,8 @@ struct st_command {
     cmd_type type;
     bool is_multiline;
     void * arg;
+    char * cmd;
+    size_t cmd_size;
     bool indicator;
 };
 
@@ -48,6 +50,7 @@ void cmd_parser_init(struct cmd_parser * parser);
 void cmd_init(struct st_command * cmd);
 cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue * queue, const uint8_t b, bool * new_cmd);
 cmd_state cmd_comsume(buffer *b, struct Queue * queue, struct cmd_parser *p, bool * new_cmd);
+void cmd_destroy(struct st_command *command);
 void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, struct Queue *queue, bool * new_cmd);
 
 #endif

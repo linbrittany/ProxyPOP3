@@ -8,4 +8,8 @@ struct Queue* create_queue();
 void enqueue(struct Queue* q, void * data);
 // Function to remove a key from given queue q
 void* dequeue(struct Queue* q);
+
+int queue_is_empty(struct Queue * queue);
+
+int queue_size(struct Queue * queue);
 #endif
