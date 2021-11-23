@@ -106,7 +106,6 @@ int parse( char *buffer, char to_ret []) {
     }
 
     indicator += adv(buffer+indicator);
-    printf("token %s %d\n", buffer+indicator,indicator);
     if ( buffer[indicator] == 0) {
         sprintf(to_ret, "Please enter command\n");
         return -1;
