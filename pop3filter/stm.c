@@ -26,7 +26,6 @@ void stm_init(struct state_machine *stm) {
 inline static void handle_first(struct state_machine *stm, struct selector_key *key) {
     if(stm->current == NULL) {
         stm->current = stm->states + stm->initial;
-        log(DEBUG,"STATE %u\n", stm->current->state);
         if(NULL != stm->current->on_arrival) {
             stm->current->on_arrival(stm->current->state, key);
         }
@@ -51,7 +50,6 @@ inline static void jump(struct state_machine *stm, unsigned next, struct selecto
 
 unsigned stm_handler_read(struct state_machine *stm, struct selector_key *key) {
     handle_first(stm, key);
-    log(DEBUG,"STM READ%d\n",1);
     if(stm->current->on_read_ready == 0) {
         abort();
     }
