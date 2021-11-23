@@ -43,14 +43,15 @@ void get_error_file(char *to_ret);
 status_code set_error_file(char * arg, char to_ret[]);
 void get_timeout(char *to_ret);
 void get_help(char to_ret[]);
+status_code set_timeout(char *arg, char *buffer);
 
 command_action commands[COMMANDS_QTY] = {
     {.command = "stats"         , .args_qty = 0, .function = {.getter = &get_stats}      },
     {.command = "help"          , .args_qty = 0, .function = {.getter = &get_help}       },
     {.command = "get_buff_size" , .args_qty = 0, .function = {.getter = &get_buffer_size}},
     {.command = "set_buff_size" , .args_qty = 1, .function = {.setter = &set_buffer_size}},
-    {.command = "get_timeout"   , .args_qty = 0, .function = {.getter = &get_timeout}},
-    // {.command = "set_timeout"   , .args_qty = 1, .function = {.getter = &get_buffer_size}},
+    {.command = "get_timeout"   , .args_qty = 0, .function = {.getter = &get_timeout}   },
+    {.command = "set_timeout"   , .args_qty = 2, .function = {.setter = &set_timeout}   },
     {.command = "get_error_file", .args_qty = 0, .function = {.getter = &get_error_file }},
     {.command = "set_error_file", .args_qty = 1, .function = {.setter = &set_error_file}},
     {.command = "get_filter"    , .args_qty = 0, .function = {.getter = &get_buffer_size}},
@@ -173,10 +174,6 @@ void get_error_file(char *to_ret) {
     sprintf(to_ret, "Error file: %s\n", args.stderr_file_path);
 }
 
-void get_timeout(char *to_ret) {
-    sprintf(to_ret, "Current timeout: %ld\n", conf.select_timeout.tv_sec);
-}
-
 status_code set_error_file(char * arg, char to_ret[]) {
     FILE *file;
     int advance = adv(arg);
@@ -198,14 +195,27 @@ void get_help(char to_ret[]) {
     sprintf(to_ret,"Help (try one of this commands):\nstats\nget_buff_size\nset_buff_size\nget_timeout\nget_error_file\nset_error_file\nget_filter\nset_filter\n");
 }
 
-// status_code set_timeout(char *arg, char buffer[]) {
+status_code set_timeout(char *arg, char *to_ret) {
+    int advance = adv(arg);
+    advance += adv(arg+advance);
 
-// }
+    long s = atol(arg+advance);
+    advance += adv(arg+advance);
+    long ns = atol(arg+advance);
 
-// // TODO return void?
-// status_code get_timeout(char buffer []) {
-//     sprintf(buffer,"Timeout value: %d",); // no hay timeout ni idea q paso aca
-//     return OK_RESPONSE
-// }
+    if (s <= 0 && ns <= 0 ) {
+        sprintf(to_ret,"You must enter a number greather than 0\n");
+        return INVALID_ARGUMENT;
+    }
+
+    conf.select_timeout.tv_sec = s;
+    conf.select_timeout.tv_nsec = ns;
+
+    return OK_RESPONSE;
+}
+
+void get_timeout(char *to_ret) {
+    sprintf(to_ret,"Timeout value:\nSeconds: %lu\nNano Seconds: %lu\n",conf.select_timeout.tv_sec,conf.select_timeout.tv_nsec);
+}
 
 
