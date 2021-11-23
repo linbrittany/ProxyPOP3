@@ -72,6 +72,9 @@ extern enum hello_state hello_consume(buffer *b, struct hello_parser *p, bool *e
     enum hello_state st = p->state;
     while(buffer_can_parse(b)) {
         const uint8_t c = buffer_parse(b);
+        if (b->parsed == b->write) {
+            b->parsed = b->data;
+        }
         st = hello_parser_feed(p, c);
         if (hello_is_done(st, errored)) {
             break;
