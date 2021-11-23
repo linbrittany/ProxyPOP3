@@ -222,9 +222,10 @@ void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, struct Que
             current_cmd->arg = NULL;
         }
     }
+    
     current_cmd->is_multiline = is_multiline(current_cmd, p->arg_qty);
     memcpy(cmd_copy, current_cmd, sizeof(struct st_command));
-    //agregar a cola
+    
     enqueue(queue,cmd_copy);
     *new_cmd = true;
     p->state = CMD_TYPE;
