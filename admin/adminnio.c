@@ -13,7 +13,7 @@
 
 extern struct proxy_args args;
 
-int parse(char *buffer, char to_ret []);
+int parse( char *buffer, char to_ret []);
 
 typedef enum status_code{
     OK_RESPONSE         = 200,
@@ -66,38 +66,52 @@ void admin_passive_accept(struct selector_key *key) {
         if (commands[cmd].function.setter != NULL) {
             commands[cmd].function.setter(buffer,to_ret);
         } else {
-            commands[cmd].function.getter(buffer);
+            commands[cmd].function.getter(to_ret);
         }
     }
 
+    log(DEBUG,"%lu",strlen(to_ret));
     sendto(key->fd, to_ret, strlen(to_ret), 0, (const struct sockaddr *) &clntAddr, len);
 
     return;
 }
 
-int parse (char *buffer, char to_ret []) { 
-    const char s[2] = " ";
-    char *token;
+int adv(const char *buffer) {
+    int i;
+    for ( i = 0; buffer[i] != ' ' && buffer[i] != 0; i++);
+    return buffer[i] == 0?i : i+1;
+}
+
+int strcmp_custom(char *str1,char *str2) {
+    for (int i = 0; str1[i] != 0 && str2[i] != 0 && str2[i] != ' '; i++) {
+        if (str1[i] != str2[i]) return -1;
+    }
+    return 0;
+}
+
+int parse( char *buffer, char to_ret []) { 
+    int indicator = 0 ;
     size_t token_count = 0;
     int command_index = -1;
 
     char *credToken = args.admin_credential;
 
-    token = strtok(buffer,s);
-    if (strcmp(credToken, token) != 0 ) {
+    // indicator = adv(buffer);
+    log(INFO,"%s",buffer);
+    if (strcmp_custom(credToken, buffer) != 0 ) {
         sprintf(to_ret, "Please enter valid token\n");
         return -1;
     }
 
-    token = strtok(NULL, s);
-    printf("token %s\n", token);
-    if (token == NULL) {
+    indicator += adv(buffer+indicator);
+    printf("token %s %d\n", buffer+indicator,indicator);
+    if ( buffer[indicator] == 0) {
         sprintf(to_ret, "Please enter command\n");
         return -1;
     }
 
     for (int i = 0 ; i < COMMANDS_QTY ; i++) {
-        if (strcmp(commands[i].command, token) == 0 ) {
+        if (strcmp(commands[i].command, buffer+indicator) == 0 ) {
             command_index = i;
             break;
         }
@@ -108,14 +122,14 @@ int parse (char *buffer, char to_ret []) {
         return command_index;
     }
 
-    token = strtok(NULL, s);
-    while (token != NULL) {
+    indicator += adv(buffer+indicator);
+    while (buffer[indicator] != 0) {
         token_count++;
         if (token_count > commands[command_index].args_qty) {
             sprintf(to_ret, "INVALID ARGS");
             return -1;
         }
-        token = strtok(NULL, s);
+        indicator += adv(buffer+indicator);
     }
 
     return command_index;
@@ -139,6 +153,7 @@ status_code set_buffer_size(char * arg, char buffer []) {
 
 
 void get_buffer_size(char buffer []) {
+    log(DEBUG,"BUENAS FUNCIONA :%s",buffer);
     sprintf(buffer, "Buffer size value: %zu", args.buffer_size);
 }
 
