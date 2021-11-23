@@ -135,7 +135,7 @@ int parse( char *buffer, char to_ret []) {
     while (buffer[indicator] != 0) {
         token_count++;
         if (token_count > commands[command_index].args_qty) {
-            sprintf(to_ret, "Please use valid arguments");
+            sprintf(to_ret, "Please use valid arguments\n");
             return -1;
         }
         indicator += adv(buffer+indicator);
@@ -210,6 +210,8 @@ status_code set_timeout(char *arg, char *to_ret) {
 
     conf.select_timeout.tv_sec = s;
     conf.select_timeout.tv_nsec = ns;
+
+    get_timeout(to_ret);
 
     return OK_RESPONSE;
 }
