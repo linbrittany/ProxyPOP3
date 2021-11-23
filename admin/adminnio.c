@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "adminnio.h"
 #include "logger.h"
@@ -181,14 +182,15 @@ status_code set_error_file(char * arg, char to_ret[]) {
     int advance = adv(arg);
     advance += adv(arg+advance);
 
-    if ((file = fopen(arg+advance,"r")) == NULL) {
+    if ((file = fopen(arg+advance,"w")) == NULL) {
         sprintf(to_ret,"This file cannot be open\nFile: %s\n",arg+advance);
         return INVALID_ARGUMENT;
     }
-    fclose(file);
     args.stderr_file_path = calloc(strlen(arg+advance)+1,sizeof(char)); //TODO FREE In after when all close add variable to know if need free
     memcpy(args.stderr_file_path,arg+advance,strlen(arg+advance));
     sprintf(to_ret,"New error file is: %s\n",arg+advance);
+    dup2(fileno(file),STDERR_FILENO);
+    // fclose(file);   
     return OK_RESPONSE;
 }
 
