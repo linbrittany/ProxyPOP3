@@ -36,6 +36,8 @@ struct st_command {
     bool indicator;
 };
 
+extern char * user;
+
 struct cmd_parser {
     size_t length;
     size_t arg_len;

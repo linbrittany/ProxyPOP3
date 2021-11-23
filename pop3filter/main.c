@@ -144,9 +144,12 @@ int main(int argc, char const **argv) {
     set_up_proxy_args();
     parse_args(argc, argv);
 
+    
+
     set_address(&proxy_addr, args.listen_pop3_address);
     set_address(&admin_proxy_addr, args.listen_pop3_admin_address);
 
+    addressOrigin = args.listen_pop3_address;
     close(0); //Nada que leer de stdin
 
     const char *err_msg = NULL;

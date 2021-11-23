@@ -33,6 +33,8 @@ struct copy
 struct proxy_args args;
 struct proxy_metrics metrics;
 
+extern char * addressOrigin;
+
 void pop3_passive_accept(struct selector_key *key);
 void pop3_pool_destroy();
 

@@ -21,6 +21,8 @@ struct command_info {
     size_t min_args; //si argumento fijo, min-args = max_args
 };
 
+char * user;
+
 static const struct command_info user_commands[] = {
     {
         .type = CMD_USER, .command = "USER", .len = 4, .max_args = 1, .min_args = 1 //TODO: analizar la posibilidad de que el username tenga espacios
@@ -119,6 +121,7 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue *queue
                 else {
                     if (command_info->type == CMD_USER || command_info->type == CMD_APOP) {
                         ((uint8_t *)command_info->arg)[parser->arg_len - 1] = b;
+                        user = (char *)command_info->arg;
                     }
                     parser->arg_len++;
                 }
@@ -128,6 +131,7 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue *queue
                 }
                 if (command_info->type == CMD_USER || command_info->type == CMD_APOP) {
                     ((uint8_t *)command_info->arg)[parser->arg_len - 1] = 0;
+                     user = (char *)command_info->arg;
                 }
                 if (parser->arg_qty <= user_commands[parser->current_cmd.type].max_args && parser->arg_qty >= user_commands[parser->current_cmd.type].min_args) {
                     parser->state = CMD_CRLF;
