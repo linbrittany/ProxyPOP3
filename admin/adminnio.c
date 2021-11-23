@@ -48,14 +48,12 @@ status_code set_timeout(char *arg, char *buffer);
 command_action commands[COMMANDS_QTY] = {
     {.command = "stats"         , .args_qty = 0, .function = {.getter = &get_stats}      },
     {.command = "help"          , .args_qty = 0, .function = {.getter = &get_help}       },
-    {.command = "get_buff_size" , .args_qty = 0, .function = {.getter = &get_buffer_size}},
-    {.command = "set_buff_size" , .args_qty = 1, .function = {.setter = &set_buffer_size}},
-    {.command = "get_timeout"   , .args_qty = 0, .function = {.getter = &get_timeout}   },
-    {.command = "set_timeout"   , .args_qty = 2, .function = {.setter = &set_timeout}   },
-    {.command = "get_error_file", .args_qty = 0, .function = {.getter = &get_error_file }},
-    {.command = "set_error_file", .args_qty = 1, .function = {.setter = &set_error_file}},
-    {.command = "get_filter"    , .args_qty = 0, .function = {.getter = &get_buffer_size}},
-    {.command = "set_filter"    , .args_qty = 1, .function = {.getter = &get_buffer_size}},
+    {.command = "getbuffsize" , .args_qty = 0, .function = {.getter = &get_buffer_size}},
+    {.command = "setbuffsize" , .args_qty = 1, .function = {.setter = &set_buffer_size}},
+    {.command = "gettimeout"   , .args_qty = 0, .function = {.getter = &get_timeout}   },
+    {.command = "settimeout"   , .args_qty = 2, .function = {.setter = &set_timeout}   },
+    {.command = "geterrorfile", .args_qty = 0, .function = {.getter = &get_error_file }},
+    {.command = "seterrorfile", .args_qty = 1, .function = {.setter = &set_error_file}},
 };
 
 void admin_passive_accept(struct selector_key *key) {
@@ -219,5 +217,3 @@ status_code set_timeout(char *arg, char *to_ret) {
 void get_timeout(char *to_ret) {
     sprintf(to_ret,"Timeout value:\nSeconds: %lu\nNano Seconds: %lu\n",conf.select_timeout.tv_sec,conf.select_timeout.tv_nsec);
 }
-
-

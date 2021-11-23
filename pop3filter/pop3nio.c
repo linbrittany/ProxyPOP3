@@ -556,7 +556,7 @@ static unsigned connection_done(struct selector_key * key) {
         }
         return ERROR;
     }
-    else  if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy_pop3->client_fd, OP_READ)) { //Setear origin para leer
+    else  if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
         log(INFO, "Connection established for client %d and origin %d\n", proxy_pop3->client_fd, key->fd);
         return HELLO;
     }
@@ -710,16 +710,15 @@ static void copy_init(const unsigned state, struct selector_key *key){
 
     struct copy *c = &ATTACHMENT(key) -> client.copy;
     c->fd = &ATTACHMENT(key)->client_fd;
-    c->read_b = ATTACHMENT(key)->write_buffer; 
+    c->read_b = ATTACHMENT(key)->write_buffer; //escribe client
     c->write_b = ATTACHMENT(key)->read_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->origin.copy;
     
-    
     c = &ATTACHMENT(key)->origin.copy;
     
     c->fd = &ATTACHMENT(key)->origin_fd;
-    c->read_b = ATTACHMENT(key)->read_buffer;
+    c->read_b = ATTACHMENT(key)->read_buffer; //aca escribe origin
     c->write_b = ATTACHMENT(key)->write_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->client.copy;
@@ -885,6 +884,8 @@ static unsigned copy_r(struct selector_key *key){
         }
 
     }else{
+        log(DEBUG, "COPY R before read buffer ptr %s\n", b->read);
+        log(DEBUG, "COPY R before write buffer ptr %s\n", b->write);
         buffer_write_adv(b,n); 
         //filter_write(&f->in[W],b);
         //close(f->in[W]);
