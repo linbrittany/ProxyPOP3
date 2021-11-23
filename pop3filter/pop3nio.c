@@ -33,7 +33,7 @@
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 #define MAX_BUFF 4000
 
-
+char * addressOrigin;
 
 
 //In[W] -----> pipe 1 IN[R]
@@ -977,7 +977,7 @@ static unsigned write_error_msg(struct selector_key * key) {
 
 static void set_variables(struct pop3 * pop3_struct){
     setenv("POP3FILTER_VERSION", "0.0.0.0", 1);//cambiar la version
-    setenv("POP3_SERVER", pop3_struct->origin_addr_data.addr.fqdn, 1);//todo revisar
+    setenv("POP3_SERVER",addressOrigin, 1);//todo revisar
 }
 
 static const struct fd_handler filter_handler = {
