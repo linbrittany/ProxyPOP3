@@ -8,10 +8,10 @@
 #include <stdlib.h>
 
 #include "parser_multiline.h"
-#define ATTACHMENT(key) ((struct pop3 *)(key)->data)
+
 
 int state = 0;
-int state_out = 0; 
+int state_out = 4; 
 //Dado el mensaje, devuelve el indice donde terminan los headers, y transforma los puntos.
 int parse_headers(struct copy * c){
     buffer * b = c->write_b;
@@ -52,19 +52,18 @@ int parse_headers(struct copy * c){
                 else state = BYTE;
                 break;
             case  DOT:
-                if(read[i] == '\r') state = DOT_CR;
-                else if(read[i] == '.') state = DOT_2;  
-                else state = BYTE;
+                if(read[i] == '\r') state = DOT_CR; 
+                state = BYTE;
                 break;
             case  DOT_2:
                 if((i-1) == 0){
                   strcpy(read,read + 1);
-                  read[count] = 0;
                 }else{
                     char * buff = malloc((i-1)* sizeof(char));
                     strncpy(buff, read, i-2);
-                    buff[i-1] = 0;
-                    strncpy(read + (i-1),buff, count- i + 1);
+                    char * buff_end = malloc((count - i + 1)* sizeof(char));
+                    strncpy(buff_end,read + (i-2), count- i + 1);
+                    strncpy(buff,read,i - 2);
 
                 }
                 if(read[i] == '\r') state = CR;
@@ -82,7 +81,7 @@ int parse_headers(struct copy * c){
                 if(read[i] == '\n') state = NEW_LINE;
                 else state = BYTE;
                 break;
-            case END: //SACAR PUNTO FINAL?
+            case END: 
                 return index;
                 break;
         }
@@ -99,10 +98,10 @@ int parse_headers(struct copy * c){
 
 
 void back_to_pop3(char * read){
-    size_t count = 0;
-    //int n = strlen(read);
+    //size_t count = 0;
+    int count = strlen(read);
 
-    for(size_t i = 0; i<count; i++){
+    for(int i = 0; i<count; i++){
 
         switch(state_out){
             case NEW_LINE:
@@ -110,21 +109,27 @@ void back_to_pop3(char * read){
                 else state_out = BYTE;
                 break;
             case  DOT:
-                if(read[i] == '\r') state_out = CR;
+                if(read[i] == '\r') state_out = DOT_CR; 
                 else{
-                char * buff_start = malloc((i + 2)* sizeof(char));
-                strncpy(buff_start, read, i);
-                buff_start[i+ 1] = '.';
-                buff_start[i+2] = 0;
-                char * buff_end = malloc((count-i)* sizeof(char));
-                strncpy(buff_end, read + i, i);
-                strncpy(read,buff_start, i + 1);
-                strncpy(read + i + 1,buff_start, count - i + 1);
+                    char * buff_start = malloc((i + 1)* sizeof(char));
+                    strncpy(buff_start, read, i);
+                    char * buff_end = malloc((count-i +1)* sizeof(char));
+                    strncpy(buff_end, read + i - 1, count-i +1);
+                    strncpy(read,buff_start, i);
+                    strncpy(read + i,buff_end, count - i + 1);
+                    i++;
+                    state_out = BYTE;
+
                 }
                 
                 break;
+            case DOT_CR:
+                if(read[i] == '\n') state_out = END;
+                else state_out = BYTE;
+                break;
             case BYTE:
                 if(read[i] == '\r') state_out = CR;
+                else if(read[i] == '.') state_out = DOT;
                 else state_out = BYTE;
                 break;
             case CR:
