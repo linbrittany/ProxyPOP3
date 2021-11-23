@@ -184,11 +184,8 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue *queue
 
 extern cmd_state cmd_comsume(buffer *b, struct Queue * queue, struct cmd_parser *p, bool * new_cmd) {
     cmd_state st = p->state;
-
-
     while(buffer_can_parse(b)) {
         const uint8_t c = buffer_parse(b);
-        log(DEBUG, "LA B : %c\n",c);
         st = cmd_parser_feed(p, queue, c, new_cmd);
     }
     buffer_parse_reset(b);
@@ -216,8 +213,8 @@ void cmd_destroy(struct st_command *command){
 
 void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, struct Queue *queue, bool * new_cmd) {
     log(DEBUG, "HANDLE CMD %s\n",current_cmd->cmd);
-    struct st_command *cmd_copy = malloc(sizeof(struct st_command *));
-    cmd_copy->cmd = malloc(MAX_CMD_SIZE);
+    struct st_command *cmd_copy = malloc(sizeof(struct st_command));
+    cmd_copy->cmd = malloc( sizeof(char) * (current_cmd->cmd_size + 1) );
     if (p->state == CMD_ERROR) {
         current_cmd->type = CMD_OTHER;
         if (current_cmd->arg != NULL) {
