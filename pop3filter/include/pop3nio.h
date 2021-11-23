@@ -12,6 +12,7 @@ struct proxy_args {
     char *listen_pop3_address;
     char *listen_origin_address;
     char *command;
+    char *admin_credential;
 };
 
 struct proxy_metrics {
@@ -19,6 +20,14 @@ struct proxy_metrics {
     unsigned long total_connections;
 
     unsigned long bytes_transferred;
+};
+
+struct copy
+{
+    int *fd;
+    buffer *read_b, *write_b;
+    struct copy *other;
+    fd_interest duplex;
 };
 
 struct proxy_args args;

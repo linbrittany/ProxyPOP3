@@ -24,10 +24,10 @@
 #include "response_parser.h"
 
 /*utils*/
-#include "queue.h"
-#include "buffer.h"
-#include "logger.h"
-#include "netutils.h"
+#include "../utils/include/queue.h"
+#include "../utils/include/buffer.h"
+#include "../utils/include/logger.h"
+#include "../utils/include/netutils.h"
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 #define MAX_BUFF 4000
@@ -52,13 +52,6 @@ struct filter{
 };
 
 
-struct copy
-{
-    int *fd;
-    buffer *read_b,*write_b;
-    struct copy *other;
-    fd_interest duplex;
-};
 
 struct check_capa
 {
@@ -427,6 +420,7 @@ static void pop3_read(struct selector_key *key) {
 static void pop3_write(struct selector_key *key) {
     struct state_machine *stm = &ATTACHMENT(key)->stm;
     const enum pop3state st = stm_handler_write(stm, key);
+
     if(ERROR == st || DONE == st) {
         pop3_done(key);
     }
@@ -552,7 +546,7 @@ static unsigned connection_done(struct selector_key * key) {
         }
         return ERROR;
     }
-    else if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
+    else  if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy_pop3->client_fd, OP_READ)) { //Setear origin para leer
         log(INFO, "Connection established for client %d and origin %d\n", proxy_pop3->client_fd, key->fd);
         return HELLO;
     }
@@ -644,6 +638,7 @@ static void check_capa_init(const unsigned state, struct selector_key *key){
 static const char *capa_msg = "CAPA\n";
 static const int CAPA_MSG_LEN = 5;
 
+
 /*lectura y parseo de la respuesta del origen */
 static unsigned check_capa_read(struct selector_key *key){
     struct pop3 * proxy = ATTACHMENT(key);
@@ -679,7 +674,7 @@ static unsigned check_capa_write(struct selector_key *key){
     struct pop3 * proxy = ATTACHMENT(key);
     //struct check_capa * check_capabilities = &proxy->origin.capabilities;
     int n = send(key->fd, capa_msg, CAPA_MSG_LEN, MSG_NOSIGNAL);
-    if (n > 0) {
+    if(n > 0){
         log(INFO, "Bytes sent: %d\n", n);
         if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_READ) &&
                SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ) ) {
@@ -701,94 +696,110 @@ struct copy * copy_ptr(struct selector_key * key) {
 }
 
 static void copy_init(const unsigned state, struct selector_key *key){
-    struct copy *c = &ATTACHMENT(key)->client.copy;
+     log(INFO, "COPY READ%d\n",1);
 
-    if (args.command == NULL) {
-        c->fd = &ATTACHMENT(key)->client_fd;
-        c->read_b = ATTACHMENT(key)->write_buffer; 
-        c->write_b = ATTACHMENT(key)->read_buffer;
-        c->duplex = OP_READ | OP_WRITE;
-        c->other = &ATTACHMENT(key)->origin.copy;
-               
-        c = &ATTACHMENT(key)->origin.copy;
-        
-        c->fd = &ATTACHMENT(key)->origin_fd;
-        c->read_b = ATTACHMENT(key)->read_buffer;
-        c->write_b = ATTACHMENT(key)->write_buffer;
-        c->duplex = OP_READ | OP_WRITE;
-        c->other = &ATTACHMENT(key)->client.copy;
+    struct copy *c = &ATTACHMENT(key) -> client.copy;
 
-    } else {
-        c->fd = &ATTACHMENT(key)->client_fd;
-        c->read_b = ATTACHMENT(key)->write_buffer; 
-        c->write_b = ATTACHMENT(key)->read_buffer;
-        c->duplex = OP_READ | OP_WRITE;
-        c->other = &ATTACHMENT(key)->origin.copy;
-        
-        c = &ATTACHMENT(key)->origin.copy;
-        
-        c->fd = &ATTACHMENT(key)->origin_fd;
-        c->read_b = ATTACHMENT(key)->read_buffer;
-        c->write_b = ATTACHMENT(key)->write_buffer;
-        c->duplex = OP_READ | OP_WRITE;
-        c->other = &ATTACHMENT(key)->filter_in.copy;
+    if(args.command == NULL){
+    c->fd = &ATTACHMENT(key)->client_fd;
+    c->read_b = ATTACHMENT(key)->write_buffer; 
+    c->write_b = ATTACHMENT(key)->read_buffer;
+    c->duplex = OP_READ | OP_WRITE;
+    c->other = &ATTACHMENT(key)->origin.copy;
+    
+    
+    c = &ATTACHMENT(key)->origin.copy;
+    
+    c->fd = &ATTACHMENT(key)->origin_fd;
+    c->read_b = ATTACHMENT(key)->read_buffer;
+    c->write_b = ATTACHMENT(key)->write_buffer;
+    c->duplex = OP_READ | OP_WRITE;
+    c->other = &ATTACHMENT(key)->client.copy;
 
-        filter_init(key); // chequear si esto va aca
+    }else{
 
-        c = &ATTACHMENT(key)->filter_in.copy;
-        
-        c->fd = &ATTACHMENT(key)->filter_data.in[W]; 
-        c->read_b = ATTACHMENT(key)->write_buffer; 
-        c->write_b = ATTACHMENT(key)->read_buffer;
-        c->duplex = OP_READ | OP_WRITE;
-        c->other = &ATTACHMENT(key)->filter_out.copy;
 
-        c = &ATTACHMENT(key)->filter_out.copy;
-        
-        c->fd = &ATTACHMENT(key)->filter_data.out[R]; 
-        c->read_b = ATTACHMENT(key)->read_buffer; 
-        c->write_b = ATTACHMENT(key)->write_buffer;
-        c->duplex = OP_READ | OP_WRITE;
-        c->other = &ATTACHMENT(key)->client.copy;
+    c->fd = &ATTACHMENT(key)->client_fd;
+    c->read_b = ATTACHMENT(key)->write_buffer; 
+    c->write_b = ATTACHMENT(key)->read_buffer;
+    c->duplex = OP_READ | OP_WRITE;
+    c->other = &ATTACHMENT(key)->origin.copy;
+    
+    
+    c = &ATTACHMENT(key)->origin.copy;
+    
+    c->fd = &ATTACHMENT(key)->origin_fd;
+    c->read_b = ATTACHMENT(key)->read_buffer;
+    c->write_b = ATTACHMENT(key)->write_buffer;
+    c->duplex = OP_READ | OP_WRITE;
+    c->other = &ATTACHMENT(key)->filter_in.copy;
+
+    filter_init(key); // chequear si esto va aca
+
+    c = &ATTACHMENT(key)->filter_in.copy;
+    
+    c->fd = &ATTACHMENT(key)->filter_data.in[W]; 
+    c->read_b = ATTACHMENT(key)->write_buffer; 
+    c->write_b = ATTACHMENT(key)->read_buffer;
+    c->duplex = OP_READ | OP_WRITE;
+    c->other = &ATTACHMENT(key)->filter_out.copy;
+
+
+    c = &ATTACHMENT(key)->filter_out.copy;
+    
+    c->fd = &ATTACHMENT(key)->filter_data.out[R]; 
+    c->read_b = ATTACHMENT(key)->read_buffer; 
+    c->write_b = ATTACHMENT(key)->write_buffer;
+    c->duplex = OP_READ | OP_WRITE;
+    c->other = &ATTACHMENT(key)->client.copy;
     }
+    
+   
     
 }
 
+
+
 static void want_filter(bool filter, struct selector_key * key){
-    if (filter == true) {
-        struct copy *c = &ATTACHMENT(key) -> origin.copy;
-        
-        c->fd = &ATTACHMENT(key)->origin_fd;
-        c->other = &ATTACHMENT(key)->filter_in.copy;
+    if(filter == true){
 
-        c = &ATTACHMENT(key)->filter_in.copy;
-        
-        c->read_b = ATTACHMENT(key)->write_buffer; 
-        c->write_b = ATTACHMENT(key)->read_buffer;
+   struct copy *c = &ATTACHMENT(key) -> origin.copy;
+    
+    c->fd = &ATTACHMENT(key)->origin_fd;
+    c->other = &ATTACHMENT(key)->filter_in.copy;
+
+    c = &ATTACHMENT(key)->filter_in.copy;
+    
+    c->read_b = ATTACHMENT(key)->write_buffer; 
+    c->write_b = ATTACHMENT(key)->read_buffer;
 
 
-        c = &ATTACHMENT(key)->filter_out.copy;
-        
-        c->read_b = ATTACHMENT(key)->read_buffer; 
-        c->write_b = ATTACHMENT(key)->write_buffer;
+    c = &ATTACHMENT(key)->filter_out.copy;
+    
+    c->read_b = ATTACHMENT(key)->read_buffer; 
+    c->write_b = ATTACHMENT(key)->write_buffer;
 
-    } else {
-        struct copy *c = &ATTACHMENT(key) -> origin.copy;
-        
-        c->fd = &ATTACHMENT(key)->origin_fd;
-        c->other = &ATTACHMENT(key)->client.copy;
 
-        c = &ATTACHMENT(key)->filter_in.copy;
-        
-        c->read_b = NULL; 
-        c->write_b = NULL;
+    }else{
 
-        c = &ATTACHMENT(key)->filter_out.copy;
-        
-        c->read_b = NULL; 
-        c->write_b = NULL;
+    struct copy *c = &ATTACHMENT(key) -> origin.copy;
+    
+    c->fd = &ATTACHMENT(key)->origin_fd;
+    c->other = &ATTACHMENT(key)->client.copy;
+
+    c = &ATTACHMENT(key)->filter_in.copy;
+    
+    c->read_b = NULL; 
+    c->write_b = NULL;
+
+
+    c = &ATTACHMENT(key)->filter_out.copy;
+    
+    c->read_b = NULL; 
+    c->write_b = NULL;
 
     }
+
 }
 
 static fd_interest copy_interest(fd_selector s, struct copy *c){ 
@@ -796,38 +807,47 @@ static fd_interest copy_interest(fd_selector s, struct copy *c){
     if((c->duplex & OP_READ) && buffer_can_write(c->read_b)){
         ret |= OP_READ; //me subscribo si tengo lugar en el buffer 
     }
+
     if((c->duplex & OP_WRITE) && buffer_can_read(c->write_b)){
         ret |= OP_WRITE;
     }
     if(SELECTOR_SUCCESS != selector_set_interest(s,*c->fd,ret)){
         abort(); //TODO mensaje de error?
     }
+
     return ret;
 }
 
 static unsigned copy_r(struct selector_key *key){
+
     struct copy *c = copy_ptr(key); 
     assert(*c->fd == key->fd);
     size_t size;
     ssize_t n;
     buffer *b = c->read_b;
     unsigned ret = COPY; 
-    
-    uint8_t *ptr = buffer_write_ptr(b, &size);
-    n = recv(key->fd, ptr, size, 0);
 
-    if (n <= 0) {
+    uint8_t *ptr = buffer_write_ptr(b,&size);
+    n = recv(key->fd,ptr,size,0);
+    if(*c->fd == ATTACHMENT(key)->client_fd){
+        // llamarias al parser
+        want_filter(true, key);
+    }
+
+    if(n<=0){
         shutdown(*c->fd,SHUT_RD);
         c->duplex &= -OP_WRITE;
-        if (*c->other->fd != -1) {
+        if(*c->other->fd!=-1){
             shutdown(*c->other->fd,SHUT_WR);
             c->other->duplex &= -OP_WRITE;
         }
-    } else {
+
+    }else{
         buffer_write_adv(b,n); 
         //filter_write(&f->in[W],b);
         //close(f->in[W]);
         //filter_read(&f->out[R],b);
+        
     }
 
     //filter_interest(key->s,f,b,b);
@@ -849,33 +869,30 @@ static unsigned copy_w(struct selector_key *key){
     buffer *b = c->write_b;
     unsigned ret = COPY; //ESTADO DE RETORNO?
     struct pop3 * proxy = ATTACHMENT(key);
-
     if (*c->fd == proxy->origin_fd) {
         bool new_cmd = false;
         struct cmd_parser * parser = &proxy->command_parser;
         cmd_comsume(b, proxy->commands_queue, parser, &new_cmd);
         bool filter = parser->current_cmd.type == CMD_RETR || parser->current_cmd.type == CMD_TOP;
-        log(INFO, "Command type %d\n", ((struct st_command *)dequeue(proxy->commands_queue))->type);
-        log(INFO, "Command type 2 %d\n", ((struct st_command *)dequeue(proxy->commands_queue))->type);
+        log(INFO, "Command type %d\n", parser->current_cmd.type);
         want_filter(filter, key);
     }
 
-    uint8_t *  ptr = buffer_read_ptr(b, &size);
+    uint8_t *  ptr = buffer_read_ptr(b,&size);
 
     n = send(key->fd,ptr,size,MSG_NOSIGNAL);
-    if (n == -1) {
+    if(n==-1){
         shutdown(*c->fd,SHUT_WR);
         c->duplex &= -OP_WRITE;
-        if (*c->other->fd != -1) {
+        if(*c->other->fd!=-1){
             shutdown(*c->other->fd,SHUT_RD);
             c->other->duplex &= -OP_READ;
         }
-    } else {
+    }else{
         buffer_read_adv(b,n);
     }
     copy_interest(key->s,c);
     copy_interest(key->s,c->other);
-
     if(c->duplex == OP_NOOP){ //SE CERRARON LOS DOS
         ret = DONE;
     }
@@ -892,7 +909,6 @@ static unsigned write_error_msg(struct selector_key * key) {
     if(proxy->error_sender.message_length == 0)
         proxy->error_sender.message_length = strlen(proxy->error_sender.message);
         
-    // logDebg("Enviando error: %s", proxy->error_sender.message);
     char *   ptr  = proxy->error_sender.message + proxy->error_sender.sended_size;
     ssize_t  size = proxy->error_sender.message_length - proxy->error_sender.sended_size;
     ssize_t  n    = send(proxy->client_fd, ptr, size, MSG_NOSIGNAL);
@@ -921,7 +937,9 @@ static const struct fd_handler filter_handler = {
     .handle_block  = filter_block,
 };
 
+
 static void filter_init(struct selector_key *key){
+ 
     struct filter *f = &ATTACHMENT(key) -> filter_data;
     //f->fd = &ATTACHMENT(key) -> origin_fd;
 
@@ -930,7 +948,7 @@ static void filter_init(struct selector_key *key){
         f->out[i] = -1;
     }
 
-    if (pipe(f->in) == -1 || pipe(f->out) == -1) {
+    if(pipe(f->in)==-1 || pipe(f->out) == -1){
         perror("error creating pipes");
         exit(EXIT_FAILURE);
         return;
@@ -938,11 +956,12 @@ static void filter_init(struct selector_key *key){
 
     const pid_t pid = fork();
 
-    if (pid == -1) {
+
+    if(pid == -1){
         perror("creating process");
         exit(EXIT_FAILURE);
         return; //todo estado de error?
-    } else if (pid == 0) { // soy el hijo ej cat
+    }else if(pid == 0){ // soy el hijo ej cat
         close(f->in[W]); // no quiero escribir en el pipe de escritura si soy el hijo
         close(f->out[R]);
         f->in[W] = f->out[R] == -1;
@@ -961,7 +980,9 @@ static void filter_init(struct selector_key *key){
            f->out[W] = -1;
        }
        
-    } else {
+
+    }else{
+        
         close(f->in[R]);
         close(f->out[W]);
         f->in[R] = f->out[W] = -1;
@@ -971,16 +992,18 @@ static void filter_init(struct selector_key *key){
         selector_register(key->s, f->in[W], &filter_handler, OP_READ, ATTACHMENT(key));
         selector_register(key->s, f->out[R], &filter_handler, OP_WRITE, ATTACHMENT(key));
      
+
         //int fds[] = {in,out,f->in[W],f->out[R]};
         //serve(fds);
         //filter_interest(key->s,f);
     }
 
+
+
 }
 
 /*
 int fd_select(int fd[2], int n){
-
     for(int i = 0; i<2; i++){
         if(fd[i] > n){
             n = fd[i];
@@ -989,7 +1012,6 @@ int fd_select(int fd[2], int n){
     }
     return n;
 }//  la funcion select te pide el fd mas grande
-
 */
 
 /*
@@ -999,28 +1021,21 @@ int fd_select(int fd[2], int n){
         R=0,
         W=1
     };
-
     //int nfds = fd_select(f->in,0);
     //nfds = fd_select(f->out,nfds);
-
     f->duplex[0] = OP_NOOP;
     f->duplex[1] = OP_NOOP;
     //f->buff_in = buffer_init(MAX_BUFF);
     //f->buff_out = buffer_init(MAX_BUFF);
-
     fd_set readfd, writefd;
     FD_ZERO(&readfd); 
     FD_ZERO(&writefd);
-
-
-
    printf("Primero");
    //Hasta aca funciona
     if(f->in[R]!=-1&& buffer_can_write(buff_in)){
         //FD_SET(f->in[R],&readfd); 
         f->duplex[0] |= OP_READ; //me subscribo si tengo lugar en el buffer 
     }
-
        printf("   2");
     if(f->out[R]!=-1&& buffer_can_write(buff_out)){
         //FD_SET(f->out[R],&readfd); 
@@ -1036,36 +1051,27 @@ int fd_select(int fd[2], int n){
         //FD_SET(f->in[R],&writefd); 
         f->duplex[0] |= OP_WRITE; //me subscribo si tengo lugar en el buffer 
     }
-
     printf("   5");
     
     
       if(SELECTOR_SUCCESS != selector_set_interest(s,f->in[W],f->duplex[W])){ //Escribir cat
         abort(); //TODO mensaje de error?
     }
-
     printf("   6");
-
       if(SELECTOR_SUCCESS != selector_set_interest(s,f->out[R],f->duplex[R])){ //Leer
         abort(); //TODO mensaje de error?
     }
     
-
     printf("   7");
-
     if(-1==f->in[R] && -1!=f->out[W] && !buffer_can_read(buff_in)){
         close(f->out[W]);
         f->out[W] = -1;
     }
-
-
     printf("   8");
-
     if(-1 == f->out[R] && -1 != f->in[W] && !buffer_can_read(buff_out)){
         close(f->in[W]);
         f->in[W] = -1;
     }
-
     printf("LLEGUE AL FINAL");
 }
 */
@@ -1081,19 +1087,20 @@ static void filter_read(struct selector_key *key){
     size_t count = 0;
     ptr = buffer_write_ptr(b,&count);
     n = read(f->out[R],ptr,count);
+
   
-    if (n ==0 || n == -1) {
+    if(n==0 || n== -1){
         //problema con el filter mensaje de 
         shutdown(*c->fd,SHUT_RD);
         c->duplex &= -OP_WRITE;
         //f->duplex[R] &= -OP_WRITE; //chequear
-        if (*c->other->fd != -1) {
+        if(*c->other->fd!=-1){
             shutdown(*c->other->fd,SHUT_WR);
             c->other->duplex &= -OP_WRITE;
         }
         //f->out[R] = -1;
         //close(f->out[R]); //chequear
-    } else {
+    }else{
         buffer_write_adv(b,n);
     }
 
@@ -1116,7 +1123,7 @@ static void filter_write(struct selector_key *key){
 
     ptr = buffer_read_ptr(b,&count);
     n = write(*c->fd,ptr,count);
-    if(n == -1){
+    if(n== -1){
         shutdown(*c->fd,SHUT_WR);
         c->duplex &= -OP_WRITE;
         if(*c->other->fd!=-1){
@@ -1139,5 +1146,4 @@ static void filter_close(struct selector_key *key) {
 
 static void filter_block(struct selector_key *key) {
 }
-
 

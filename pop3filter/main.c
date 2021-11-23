@@ -12,6 +12,7 @@
 #include "netutils.h"
 #include "selector.h"
 #include "pop3nio.h"
+#include "adminnio.h"
 
 #define BACKLOG 250
 #define BUFFER_SIZE 4000
@@ -40,6 +41,7 @@ static void set_up_proxy_args(void) {
     args.listen_pop3_admin_address = "127.0.0.1";
     args.stderr_file_path = "/dev/null";
     args.buffer_size = BUFFER_SIZE;
+    args.admin_credential = "brittu";
 }
 
 static unsigned short port(const char *s) {
@@ -154,7 +156,7 @@ int main(int argc, char const **argv) {
         exit(1);
     }
 
-    if ((admin_proxy = socket(admin_proxy_addr.domain, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+    if ((admin_proxy = socket(admin_proxy_addr.domain, SOCK_DGRAM, 0)) < 0) {
         err_msg = "socket() failed for proxy admin";
         exit(1);
     }
@@ -194,11 +196,11 @@ int main(int argc, char const **argv) {
         exit(1);
     }
 
-    if ((ans = listen(admin_proxy, BACKLOG)) < 0) {
-        err_msg = "listen() failed for proxy admin";
-        close(admin_proxy);
-        exit(1);
-    }
+    // if ((ans = listen(admin_proxy, BACKLOG)) < 0) {
+    //     err_msg = "listen() failed for proxy admin";
+    //     close(admin_proxy);
+    //     exit(1);
+    // }
 
     printf("listening on tcp port: %d\n", proxy_addr.port);
 
@@ -237,13 +239,12 @@ int main(int argc, char const **argv) {
     };
 
     const struct fd_handler pop3_admin = {
-        .handle_read = NULL,
+        .handle_read = admin_passive_accept,
         .handle_write = NULL,
         .handle_close = NULL, // nada que liberar
     };
 
     set_address(&origin_addr_data, args.listen_origin_address);
-
 
     //Agregar origin addr al selector register del proxy
     if ((ss = selector_register(selector, proxy, &pop3, OP_READ, &origin_addr_data)) != SELECTOR_SUCCESS) {

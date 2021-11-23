@@ -76,6 +76,7 @@ extern enum hello_state hello_consume(buffer *b, struct hello_parser *p, bool *e
             b->parsed = b->data;
         }
         st = hello_parser_feed(p, c);
+        buffer_parse_reset(b);
         if (hello_is_done(st, errored)) {
             break;
         }
