@@ -10,7 +10,7 @@
 #include "pop3nio.h"
 
 #define BUFFER_MAX_SIZE 1024
-#define COMMANDS_QTY 10
+#define COMMANDS_QTY 8
 
 extern struct proxy_args args;
 extern struct proxy_metrics metrics;
@@ -70,6 +70,7 @@ void admin_passive_accept(struct selector_key *key) {
     char to_ret[BUFFER_MAX_SIZE] = {0};
     int cmd = 0 ;
     cmd = parse(buffer, to_ret);
+    // log(DEBUG,"COMMAND %d\n",cmd);
     if (cmd >= 0) {
         if (commands[cmd].args_qty > 0) {
             commands[cmd].function.setter(buffer,to_ret);
@@ -78,7 +79,12 @@ void admin_passive_accept(struct selector_key *key) {
         }
     }
 
-    sendto(key->fd, to_ret, strlen(to_ret), 0, (const struct sockaddr *) &clntAddr, len);
+    // log(DEBUG,"EXECUTED %d\n",cmd);
+
+    ssize_t sendBytes = sendto(key->fd, to_ret, strlen(to_ret), 0, (const struct sockaddr *) &clntAddr, len);
+
+
+    // log(DEBUG,"EXECUTED %s %zd\n",to_ret,sendBytes);
 
     return;
 }

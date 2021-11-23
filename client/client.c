@@ -1,6 +1,6 @@
 // udp client driver program
 #include <stdio.h>
-#include <strings.h>
+#include <string.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -39,17 +39,18 @@ int main()
 	// no need to specify server address in sendto
 	// connect stores the peers IP and port
     int n ;
-    while ( (n = read(STDIN_FILENO,message,1000)) > 0) {
+    if ( (n = read(STDIN_FILENO,message,MAXLINE)) > 0) {
         // const char *exit = "exit";
         // if ( strcmp(message,exit) == 0 ){
         //     break;
         // }
-
         sendto(sockfd, message, n, 0, (struct sockaddr*)NULL, sizeof(servaddr));
 	
 	    // waiting for response
-	    recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)NULL, NULL);
-	    puts(buffer);
+	    int received = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)NULL, NULL);
+	    printf("%s",buffer);
+		memset(buffer,0,received);
+		memset(message,0,n);
     }
 	// close the descriptor
 	close(sockfd);
