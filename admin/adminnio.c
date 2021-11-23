@@ -126,7 +126,7 @@ int parse( char *buffer, char to_ret []) {
     while (buffer[indicator] != 0) {
         token_count++;
         if (token_count > commands[command_index].args_qty) {
-            sprintf(to_ret, "INVALID ARGS");
+            sprintf(to_ret, "Please use valid arguments");
             return -1;
         }
         indicator += adv(buffer+indicator);
