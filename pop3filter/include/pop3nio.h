@@ -16,10 +16,10 @@ struct proxy_args {
 };
 
 struct proxy_metrics {
-    unsigned long active_connections;
-    unsigned long total_connections;
+    unsigned long long active_connections;
+    unsigned long long total_connections;
 
-    unsigned long bytes_transferred;
+    unsigned long long bytes_transferred;
 };
 
 struct copy

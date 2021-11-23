@@ -884,8 +884,9 @@ static unsigned copy_w(struct selector_key *key){
             log(DEBUG, "QUEUE SIZE %d\n", queue_size(proxy->commands_queue));
             //Hay mas de un elemento? Entonces estoy haciendo pipelining
         }
-        buffer_read_ptr(b, &size);
-        buffer_read_adv(b, size);
+        // buffer_read_ptr(b, &size);
+        // buffer_read_adv(b, size);
+        buffer_reset(b);
         uint8_t *  ptr_copy = buffer_write_ptr(b, &size);
         command_info = dequeue(proxy->commands_queue);
         memcpy(ptr_copy, command_info->cmd, command_info->cmd_size);

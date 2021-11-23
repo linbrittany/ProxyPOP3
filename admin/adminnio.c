@@ -13,6 +13,7 @@
 
 extern struct proxy_args args;
 extern struct proxy_metrics metrics;
+extern struct selector_init conf;
 
 int parse( char *buffer, char to_ret []);
 
@@ -39,13 +40,14 @@ status_code set_buffer_size(char * arg, char *to_ret);
 void get_stats(char *to_ret);
 void get_error_file(char *to_ret);
 status_code set_error_file(char * arg, char to_ret[]);
+void get_timeout(char *to_ret);
 
 command_action commands[COMMANDS_QTY] = {
     {.command = "stats"         , .args_qty = 0, .function = {.getter = &get_stats}      },
     {.command = "get_buff_size" , .args_qty = 0, .function = {.getter = &get_buffer_size}},
     {.command = "set_buff_size" , .args_qty = 1, .function = {.setter = &set_buffer_size}},
-    {.command = "get_timeout"   , .args_qty = 0, .function = {.getter = &get_buffer_size}},
-    {.command = "set_timeout"   , .args_qty = 1, .function = {.getter = &get_buffer_size}},
+    {.command = "get_timeout"   , .args_qty = 0, .function = {.getter = &get_timeout}},
+    // {.command = "set_timeout"   , .args_qty = 1, .function = {.getter = &get_buffer_size}},
     {.command = "get_error_file", .args_qty = 0, .function = {.getter = &get_error_file }},
     {.command = "set_error_file", .args_qty = 1, .function = {.setter = &set_error_file}},
     {.command = "get_filter"    , .args_qty = 0, .function = {.getter = &get_buffer_size}},
@@ -159,11 +161,16 @@ void get_buffer_size(char *to_ret) {
 }
 
 void get_stats(char *to_ret) {
-    sprintf(to_ret,"Active Connections: %lu\nTotal Bytes Transfered: %lu\nTotal Connnections: %lu\n", metrics.active_connections, metrics.bytes_transferred, metrics.total_connections);
+    sprintf(to_ret,"Active Connections: %llu\nTotal Connnections: %llu\nTotal Bytes Transfered: %llu\n", 
+        metrics.active_connections, metrics.total_connections, metrics.bytes_transferred);
 }
 
 void get_error_file(char *to_ret) {
-    sprintf(to_ret,"Error file: %s\n",args.stderr_file_path);
+    sprintf(to_ret, "Error file: %s\n", args.stderr_file_path);
+}
+
+void get_timeout(char *to_ret) {
+    sprintf(to_ret, "Current timeout: %ld\n", conf.select_timeout.tv_sec);
 }
 
 status_code set_error_file(char * arg, char to_ret[]) {
