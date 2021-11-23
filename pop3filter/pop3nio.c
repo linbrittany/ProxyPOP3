@@ -1170,6 +1170,5 @@ static void filter_block(struct selector_key *key) {
             close(fds[i]);
         }
     }
-   
 
 }
