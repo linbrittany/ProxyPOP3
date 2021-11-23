@@ -9,8 +9,9 @@
 
 #include "parser_multiline.h"
 #define ATTACHMENT(key) ((struct pop3 *)(key)->data)
-int state = 0;
 
+int state = 0;
+int state_out = 0; 
 //Dado el mensaje, devuelve el indice donde terminan los headers, y transforma los puntos.
 int parse_headers(struct copy * c){
     buffer * b = c->write_b;
@@ -52,12 +53,13 @@ int parse_headers(struct copy * c){
                 break;
             case  DOT:
                 if(read[i] == '\r') state = DOT_CR;
+                else if(read[i] == '.') state = DOT_2;  
                 else state = BYTE;
                 break;
             case  DOT_2:
                 if((i-1) == 0){
-                  strcpy(read,read -1);
-                  read[count-1] = 0;
+                  strcpy(read,read + 1);
+                  read[count] = 0;
                 }else{
                     char * buff = malloc((i-1)* sizeof(char));
                     strncpy(buff, read, i-2);
@@ -80,7 +82,7 @@ int parse_headers(struct copy * c){
                 if(read[i] == '\n') state = NEW_LINE;
                 else state = BYTE;
                 break;
-            case END:
+            case END: //SACAR PUNTO FINAL?
                 return index;
                 break;
         }
@@ -90,6 +92,50 @@ int parse_headers(struct copy * c){
     
 
     return index;
+
+    
+}
+
+
+
+void back_to_pop3(char * read){
+    size_t count = 0;
+    //int n = strlen(read);
+
+    for(size_t i = 0; i<count; i++){
+
+        switch(state_out){
+            case NEW_LINE:
+                if(read[i] == '.') state_out = DOT;
+                else state_out = BYTE;
+                break;
+            case  DOT:
+                if(read[i] == '\r') state_out = CR;
+                else{
+                char * buff_start = malloc((i + 2)* sizeof(char));
+                strncpy(buff_start, read, i);
+                buff_start[i+ 1] = '.';
+                buff_start[i+2] = 0;
+                char * buff_end = malloc((count-i)* sizeof(char));
+                strncpy(buff_end, read + i, i);
+                strncpy(read,buff_start, i + 1);
+                strncpy(read + i + 1,buff_start, count - i + 1);
+                }
+                
+                break;
+            case BYTE:
+                if(read[i] == '\r') state_out = CR;
+                else state_out = BYTE;
+                break;
+            case CR:
+                if(read[i] == '\n') state_out = NEW_LINE;
+                else state_out = BYTE;
+                break;
+        }
+
+    
+    }
+    
 
     
 }

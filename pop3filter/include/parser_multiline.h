@@ -19,7 +19,10 @@ enum filter_states {
     END,
 };
 
+extern int state;
+extern int state_out;
 
 int parse_headers(struct copy * c);
+void back_to_pop3(char * read);
 
 #endif

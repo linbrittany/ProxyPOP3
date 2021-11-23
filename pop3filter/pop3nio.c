@@ -35,6 +35,7 @@
 
 
 
+
 //In[W] -----> pipe 1 IN[R]
 //Out[R]<------ pipe 2 Out[W]
 
@@ -1032,7 +1033,10 @@ static void filter_read(struct selector_key *key){
     ptr = buffer_write_ptr(b,&count);
 
     n = read(f->out[R],ptr,count);
-    
+    state = 0;
+    back_to_pop3((char *)ptr);
+    state_out = 0;
+   
     
 
   
