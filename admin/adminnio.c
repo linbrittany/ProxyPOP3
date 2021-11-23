@@ -196,7 +196,8 @@ status_code set_error_file(char * arg, char to_ret[]) {
 }
 
 void get_help(char to_ret[]) {
-    sprintf(to_ret,"Help (try one of this commands):\nstats\nget_buff_size\nset_buff_size\nget_timeout\nget_error_file\nset_error_file\nget_filter\nset_filter\n");
+    sprintf(to_ret, 
+    "Help (try one of this commands):\nstats: print proxy's metrics\ngetbuffsize: print current buffer size\nsetbuffsize: set new buffer size\ngettimeout: print current timeout\nsettimeout: set new timeout\ngeterrorfile: print current error file\nseterrorfile: set new error file\n");
 }
 
 status_code set_timeout(char *arg, char *to_ret) {

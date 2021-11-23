@@ -33,7 +33,7 @@
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 #define MAX_BUFF 4000
 
-
+char * addressOrigin;
 
 
 //In[W] -----> pipe 1 IN[R]
@@ -621,9 +621,10 @@ static unsigned hello_write(struct selector_key * key) {
         if (hello_is_done(hello->parser.state, 0)) {
             if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_WRITE) &&
                SELECTOR_SUCCESS == selector_set_interest_key(key, OP_NOOP)){
-                   buffer_read_adv(buff, n);
+                buffer_read_adv(buff, n);
+                metrics.bytes_transferred += n;
                 return CHECK_CAPABILITIES;
-               } 
+            } 
             else
                 return ERROR;
         }
@@ -686,6 +687,7 @@ static unsigned check_capa_write(struct selector_key *key){
     int n = send(key->fd, capa_msg, CAPA_MSG_LEN, MSG_NOSIGNAL);
     if(n > 0){
         log(INFO, "Bytes sent: %d\n", n);
+        metrics.bytes_transferred += n;
         if(SELECTOR_SUCCESS == selector_set_interest(key->s, proxy->origin_fd, OP_READ) &&
                SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ) ) {
             return CHECK_CAPABILITIES;
@@ -884,8 +886,6 @@ static unsigned copy_r(struct selector_key *key){
         }
 
     }else{
-        log(DEBUG, "COPY R before read buffer ptr %s\n", b->read);
-        log(DEBUG, "COPY R before write buffer ptr %s\n", b->write);
         buffer_write_adv(b,n); 
         //filter_write(&f->in[W],b);
         //close(f->in[W]);
@@ -978,7 +978,8 @@ static unsigned write_error_msg(struct selector_key * key) {
 
 static void set_variables(struct pop3 * pop3_struct){
     setenv("POP3FILTER_VERSION", "0.0.0.0", 1);//cambiar la version
-    setenv("POP3_SERVER", pop3_struct->origin_addr_data.addr.fqdn, 1);//todo revisar
+    setenv("POP3_SERVER",addressOrigin, 1);//todo revisar
+    setenv("POP3_USERNAME",user, 1);
 }
 
 static const struct fd_handler filter_handler = {
@@ -1025,16 +1026,16 @@ static void filter_init(struct selector_key *key){
         
        if(-1 == execl("/bin/sh", "sh", "-c", args.command, (char *) 0)){
            //escribir sin transformar los mensajes
-            while(1){
-	            int c = getc(stdin);
-	            if(c < 0) exit(1);
-	            fflush(stdout);
-	            }
+           abort(); //fix-me
            perror("executing command error");
-        //    close(f->in[R]);
-        //    close(f->out[W]);
-        //    f->in[R] = -1;
-        //    f->out[W] = -1;
+        //    dup2(f->in[R],STDIN_FILENO); //"redirect"
+        //    dup2(f->out[W],STDOUT_FILENO);
+        //     while(1){
+	    //         int c = getc(stdin);
+	    //         if(c < 0) exit(1);
+        //         putc(c,stdout);
+        //         fflush(stdout);
+	    //         }
        }
        
 
@@ -1089,7 +1090,7 @@ static void filter_read(struct selector_key *key){
     ATTACHMENT(key)->flag_filter = 1;
 
   
-    if(n==0 || n== -1){
+    if(n == 0 || n == -1){
         //problema con el filter mensaje de 
         shutdown(*c->fd,SHUT_RD);
         c->duplex &= -OP_WRITE;
@@ -1102,6 +1103,7 @@ static void filter_read(struct selector_key *key){
         //close(f->out[R]); //chequear
     }else{
         buffer_write_adv(b,n);
+        metrics.bytes_transferred += n;
     }
 
     copy_interest(key->s,c);
@@ -1133,7 +1135,7 @@ static void filter_write(struct selector_key *key){
     // close(*c->fd);
     // selector_unregister_fd(key->s,*c->fd);
 
-    if(n== -1){
+    if(n == -1){
         shutdown(*c->fd,SHUT_WR);
         c->duplex &= -OP_WRITE;
         if(*c->other->fd!=-1){
