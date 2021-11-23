@@ -214,7 +214,7 @@ void cmd_destroy(struct st_command *command){
 void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, struct Queue *queue, bool * new_cmd) {
     log(DEBUG, "HANDLE CMD %s\n",current_cmd->cmd);
     struct st_command *cmd_copy = malloc(sizeof(struct st_command));
-    cmd_copy->cmd = malloc( sizeof(char) * (current_cmd->cmd_size + 1) );
+    cmd_copy->cmd = malloc(current_cmd->cmd_size);
     if (p->state == CMD_ERROR) {
         current_cmd->type = CMD_OTHER;
         if (current_cmd->arg != NULL) {
@@ -222,7 +222,7 @@ void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, struct Que
             current_cmd->arg = NULL;
         }
     }
-    
+
     current_cmd->is_multiline = is_multiline(current_cmd, p->arg_qty);
     memcpy(cmd_copy, current_cmd, sizeof(struct st_command));
     

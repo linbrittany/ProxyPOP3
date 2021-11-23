@@ -809,8 +809,7 @@ static unsigned copy_r(struct selector_key *key){
         }
     } else {
         buffer_write_adv(b,n); 
-        log(DEBUG, "COPY_R %s SENT SIZE: %ld\n",b->read, n);
-        log(DEBUG, "COPY_R write %s SENT SIZE: %ld\n",b->write, n);
+        log(DEBUG, "COPY READ SENT %zd\n", n);
         //filter_write(&f->in[W],b);
         //close(f->in[W]);
         //filter_read(&f->out[R],b);
@@ -827,7 +826,6 @@ static unsigned copy_r(struct selector_key *key){
     return ret;
 }
 
-static int pipelining;
 
 static unsigned copy_w(struct selector_key *key){
     struct copy *c = copy_ptr(key); 
@@ -841,28 +839,31 @@ static unsigned copy_w(struct selector_key *key){
     struct pop3 * proxy = ATTACHMENT(key);
 
     if (*c->fd == proxy->origin_fd) {
-        bool new_cmd = false;
-        struct cmd_parser * parser = &proxy->command_parser;
         if(queue_is_empty(proxy->commands_queue)){
+            bool new_cmd = false;
+            struct cmd_parser * parser = &proxy->command_parser;
             cmd_comsume(b, proxy->commands_queue, parser, &new_cmd);
             log(DEBUG, "QUEUE SIZE %d\n", queue_size(proxy->commands_queue));
             //Hay mas de un elemento? Entonces estoy haciendo pipelining
-            command_info = dequeue(proxy->commands_queue);
-            log(DEBUG, "COMANDO %s\n", command_info->cmd);
-            log(DEBUG, "COMANDO %d\n", command_info->type);
-            bool filter = command_info->type == CMD_RETR || command_info->type == CMD_TOP;
-            want_filter(filter, key);
-            n = send(key->fd,command_info->cmd,command_info->cmd_size,MSG_NOSIGNAL);
         }
+        buffer_read_ptr(b, &size);
+        buffer_read_adv(b, size);
+        uint8_t *  ptr_copy = buffer_write_ptr(b, &size);
+        command_info = dequeue(proxy->commands_queue);
+        memcpy(ptr_copy, command_info->cmd, command_info->cmd_size);
+        buffer_write_adv(b, command_info->cmd_size);
+        log(DEBUG, "First command sent %s\n", command_info->cmd);
+        log(DEBUG, "Command type %d\n", command_info->type);
+        bool filter = command_info->type == CMD_RETR || command_info->type == CMD_TOP;
+        want_filter(filter, key);
+        n = send(key->fd, command_info->cmd, command_info->cmd_size, MSG_NOSIGNAL);
+        cmd_destroy(command_info);
     }
     else {
         uint8_t *  ptr = buffer_read_ptr(b, &size);
-        n = send(key->fd,ptr,size,MSG_NOSIGNAL);
+        n = send(key->fd, ptr, size, MSG_NOSIGNAL);
     }
 
-    uint8_t *  ptr = buffer_read_ptr(b,&size);
-
-    n = send(key->fd,ptr,size,MSG_NOSIGNAL);
     if (n == -1) {
         shutdown(*c->fd,SHUT_WR);
         c->duplex &= -OP_WRITE;
@@ -871,26 +872,20 @@ static unsigned copy_w(struct selector_key *key){
             c->other->duplex &= -OP_READ;
         }
     } else {
-        if(*c->fd == proxy->origin_fd){
-                //Vacio el buffer porque ya encole todos los comandos
-                buffer_read_ptr(b, &size);
-                buffer_read_adv(b,size);
-        }
-        else{
-            buffer_read_adv(b,n);
-            if(!queue_is_empty(proxy->commands_queue) && pipelining == 1){
-                log(DEBUG, "QUEUE SIZE %d\n", queue_size(proxy->commands_queue));
-                pipelining = 1;
-                uint8_t *  ptr_copy = buffer_write_ptr(b, &size);
-                command_info = dequeue(proxy->commands_queue);
-                memcpy(ptr_copy, command_info->cmd, command_info->cmd_size);
-                buffer_write_adv(b,command_info->cmd_size);
-                bool filter = command_info->type == CMD_RETR || command_info->type == CMD_TOP;
-                want_filter(filter, key);
-            }
-            else pipelining = 0;
-        }
+        buffer_read_adv(b,n);
     }
+
+    // if(!queue_is_empty(proxy->commands_queue) && pipelining == 1){
+    //     log(DEBUG, "QUEUE SIZE %d\n", queue_size(proxy->commands_queue));
+    //     pipelining = 1;
+    //     uint8_t *  ptr_copy = buffer_write_ptr(b, &size);
+    //     command_info = dequeue(proxy->commands_queue);
+    //     memcpy(ptr_copy, command_info->cmd, command_info->cmd_size);
+    //     buffer_write_adv(b, command_info->cmd_size);
+    //     // bool filter = command_info->type == CMD_RETR || command_info->type == CMD_TOP;
+    //     // want_filter(filter, key);
+    // }
+    // else pipelining = 0;
 
     copy_interest(key->s,&proxy->client.copy);
     copy_interest(key->s,&proxy->origin.copy);
@@ -1023,8 +1018,6 @@ static void filter_read(struct selector_key *key){
     back_to_pop3((char *)ptr);
     state_out = 0;
    
-    
-
   
     if (n ==0 || n == -1) {
         //problema con el filter mensaje de 
