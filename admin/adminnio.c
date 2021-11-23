@@ -9,7 +9,7 @@
 #include "pop3nio.h"
 
 #define BUFFER_MAX_SIZE 1024
-#define COMMANDS_QTY 9
+#define COMMANDS_QTY 10
 
 extern struct proxy_args args;
 extern struct proxy_metrics metrics;
@@ -41,9 +41,11 @@ void get_stats(char *to_ret);
 void get_error_file(char *to_ret);
 status_code set_error_file(char * arg, char to_ret[]);
 void get_timeout(char *to_ret);
+void get_help(char to_ret[]);
 
 command_action commands[COMMANDS_QTY] = {
     {.command = "stats"         , .args_qty = 0, .function = {.getter = &get_stats}      },
+    {.command = "help"          , .args_qty = 0, .function = {.getter = &get_help}       },
     {.command = "get_buff_size" , .args_qty = 0, .function = {.getter = &get_buffer_size}},
     {.command = "set_buff_size" , .args_qty = 1, .function = {.setter = &set_buffer_size}},
     {.command = "get_timeout"   , .args_qty = 0, .function = {.getter = &get_timeout}},
@@ -88,10 +90,12 @@ int adv(const char *buffer) {
 }
 
 int strcmp_custom(char *str1,char *str2) {
-    for (int i = 0; str1[i] != 0 && str2[i] != 0 && str2[i] != ' '; i++) {
+    int i;
+    for ( i = 0; str1[i] != 0 && str2[i] != 0 && str2[i] != ' '; i++) {
         if (str1[i] != str2[i]) return -1;
     }
-    return 0;
+    if (str1[i] == 0 && (str2[i] == 0 || str2[i] == ' ') ) return 0;
+    return -1;
 }
 
 int parse( char *buffer, char to_ret []) { 
@@ -108,7 +112,6 @@ int parse( char *buffer, char to_ret []) {
     }
 
     indicator += adv(buffer+indicator);
-    printf("token %s %d\n", buffer+indicator,indicator);
     if ( buffer[indicator] == 0) {
         sprintf(to_ret, "Please enter command\n");
         return -1;
@@ -183,10 +186,14 @@ status_code set_error_file(char * arg, char to_ret[]) {
         return INVALID_ARGUMENT;
     }
     fclose(file);
-    args.stderr_file_path = calloc(strlen(arg+advance)+1,sizeof(char)); //TODO FREE ? 
+    args.stderr_file_path = calloc(strlen(arg+advance)+1,sizeof(char)); //TODO FREE In after when all close add variable to know if need free
     memcpy(args.stderr_file_path,arg+advance,strlen(arg+advance));
     sprintf(to_ret,"New error file is: %s\n",arg+advance);
     return OK_RESPONSE;
+}
+
+void get_help(char to_ret[]) {
+    sprintf(to_ret,"Help (try one of this commands):\nstats\nget_buff_size\nset_buff_size\nget_timeout\nget_error_file\nset_error_file\nget_filter\nset_filter\n");
 }
 
 // status_code set_timeout(char *arg, char buffer[]) {
