@@ -33,7 +33,7 @@
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 #define MAX_BUFF 4000
 
-
+char * addressOrigin;
 
 
 //In[W] -----> pipe 1 IN[R]
@@ -978,7 +978,8 @@ static unsigned write_error_msg(struct selector_key * key) {
 
 static void set_variables(struct pop3 * pop3_struct){
     setenv("POP3FILTER_VERSION", "0.0.0.0", 1);//cambiar la version
-    setenv("POP3_SERVER", pop3_struct->origin_addr_data.addr.fqdn, 1);//todo revisar
+    setenv("POP3_SERVER",addressOrigin, 1);//todo revisar
+    setenv("POP3_USERNAME",user, 1);
 }
 
 static const struct fd_handler filter_handler = {
@@ -1025,16 +1026,16 @@ static void filter_init(struct selector_key *key){
         
        if(-1 == execl("/bin/sh", "sh", "-c", args.command, (char *) 0)){
            //escribir sin transformar los mensajes
-            while(1){
-	            int c = getc(stdin);
-	            if(c < 0) exit(1);
-	            fflush(stdout);
-	            }
+           abort(); //fix-me
            perror("executing command error");
-        //    close(f->in[R]);
-        //    close(f->out[W]);
-        //    f->in[R] = -1;
-        //    f->out[W] = -1;
+        //    dup2(f->in[R],STDIN_FILENO); //"redirect"
+        //    dup2(f->out[W],STDOUT_FILENO);
+        //     while(1){
+	    //         int c = getc(stdin);
+	    //         if(c < 0) exit(1);
+        //         putc(c,stdout);
+        //         fflush(stdout);
+	    //         }
        }
        
 

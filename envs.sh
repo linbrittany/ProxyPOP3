@@ -1,7 +1,9 @@
 #!/bin/bash
-cat > /dev/null &
-echo -e "X-Header: true
-hola
-.
-EOF\n"
+cat << EOF | unix2dos
+X-Header: true
 
+.hola
+..hola
+.
+EOF
+cat > /dev/null
