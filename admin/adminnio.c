@@ -37,6 +37,8 @@ typedef struct command_action {
 void get_buffer_size(char *to_ret);
 status_code set_buffer_size(char * arg, char *to_ret);
 void get_stats(char *to_ret);
+void get_error_file(char *to_ret);
+status_code set_error_file(char * arg, char to_ret[]);
 
 command_action commands[COMMANDS_QTY] = {
     {.command = "stats"         , .args_qty = 0, .function = {.getter = &get_stats}      },
@@ -44,8 +46,8 @@ command_action commands[COMMANDS_QTY] = {
     {.command = "set_buff_size" , .args_qty = 1, .function = {.setter = &set_buffer_size}},
     {.command = "get_timeout"   , .args_qty = 0, .function = {.getter = &get_buffer_size}},
     {.command = "set_timeout"   , .args_qty = 1, .function = {.getter = &get_buffer_size}},
-    {.command = "get_error_file", .args_qty = 0, .function = {.getter = &get_buffer_size}},
-    {.command = "set_error_file", .args_qty = 1, .function = {.getter = &get_buffer_size}},
+    {.command = "get_error_file", .args_qty = 0, .function = {.getter = &get_error_file }},
+    {.command = "set_error_file", .args_qty = 1, .function = {.setter = &set_error_file}},
     {.command = "get_filter"    , .args_qty = 0, .function = {.getter = &get_buffer_size}},
     {.command = "set_filter"    , .args_qty = 1, .function = {.getter = &get_buffer_size}},
 };
@@ -126,7 +128,7 @@ int parse( char *buffer, char to_ret []) {
     while (buffer[indicator] != 0) {
         token_count++;
         if (token_count > commands[command_index].args_qty) {
-            sprintf(to_ret, "INVALID ARGS");
+            sprintf(to_ret, "Please use valid arguments");
             return -1;
         }
         indicator += adv(buffer+indicator);
@@ -158,6 +160,26 @@ void get_buffer_size(char *to_ret) {
 
 void get_stats(char *to_ret) {
     sprintf(to_ret,"Active Connections: %lu\nTotal Bytes Transfered: %lu\nTotal Connnections: %lu\n", metrics.active_connections, metrics.bytes_transferred, metrics.total_connections);
+}
+
+void get_error_file(char *to_ret) {
+    sprintf(to_ret,"Error file: %s\n",args.stderr_file_path);
+}
+
+status_code set_error_file(char * arg, char to_ret[]) {
+    FILE *file;
+    int advance = adv(arg);
+    advance += adv(arg+advance);
+
+    if ((file = fopen(arg+advance,"r")) == NULL) {
+        sprintf(to_ret,"This file cannot be open\nFile: %s\n",arg+advance);
+        return INVALID_ARGUMENT;
+    }
+    fclose(file);
+    args.stderr_file_path = calloc(strlen(arg+advance)+1,sizeof(char)); //TODO FREE ? 
+    memcpy(args.stderr_file_path,arg+advance,strlen(arg+advance));
+    sprintf(to_ret,"New error file is: %s\n",arg+advance);
+    return OK_RESPONSE;
 }
 
 // status_code set_timeout(char *arg, char buffer[]) {
