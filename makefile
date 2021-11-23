@@ -1,20 +1,25 @@
-include Makefile.inc
+# LINKER 	 = gcc
+# LFLAGS 	 = -g --std=c99 -pedantic -pedantic-errors -Wall -Wextra -Werror -Wno-unused-parameter -Wno-implicit-fallthrough -D_POSIX_C_SOURCE=200809L  -lpthread -pthread
+# rm       = rm -rf
 
-rm       = rm -rf
-
-all: proxy link
+all: proxy
 
 proxy:
-	@cd pop3filter; make all
 	@cd utils; make all
 	@cd admin; make all
+	@cd pop3filter; make all
+	@cd client; make all
+
 clean:
 	@cd utils; make clean
 	@cd pop3filter; make clean
 	@cd admin; make clean
-	@$(rm) main
+	@cd client; make clean
 
-link:
-	@$(LINKER) $(LFLAGS) ./utils/*.o ./pop3filter/*.o ./admin/*.o -o main
+# pop3server: proxy utils admin
+# 	@$(LINKER) $(LFLAGS) ./utils/*.o ./pop3filter/*.o ./admin/*.o -o main
+
+# admincli: utils
+# 	@$(LINKER) $(LFLAGS) ./utils/*.o -o client
 
 .PHONY: all clean

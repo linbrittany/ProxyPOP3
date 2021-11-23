@@ -189,6 +189,11 @@ extern cmd_state cmd_comsume(buffer *b, struct Queue * queue, struct cmd_parser 
         log(DEBUG, "LA B : %c\n",c);
         st = cmd_parser_feed(p, queue, c, new_cmd);
     }
+    if (p->state == CMD_ARGS || p->state == CMD_TYPE) {
+        p->state = CMD_ERROR;
+        handle_cmd(p, &p->current_cmd, queue, new_cmd);
+        p->length = 0;
+    }
     buffer_parse_reset(b);
     return st;
 }
@@ -208,7 +213,10 @@ static bool is_multiline(struct st_command *command, size_t arg_qty) {
 }
 
 void cmd_destroy(struct st_command *command){
-    free(command->arg);
+    if (command->arg != NULL) {
+        free(command->arg);
+        command->arg = NULL;
+    }
     free(command->cmd);
 }
 

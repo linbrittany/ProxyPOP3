@@ -550,7 +550,7 @@ static unsigned connection_done(struct selector_key * key) {
         }
         return ERROR;
     }
-    else  if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy_pop3->client_fd, OP_READ)) { //Setear origin para leer
+    else  if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
         log(INFO, "Connection established for client %d and origin %d\n", proxy_pop3->client_fd, key->fd);
         return HELLO;
     }
@@ -706,16 +706,15 @@ static void copy_init(const unsigned state, struct selector_key *key){
 
     if(args.command == NULL){
     c->fd = &ATTACHMENT(key)->client_fd;
-    c->read_b = ATTACHMENT(key)->write_buffer; 
+    c->read_b = ATTACHMENT(key)->write_buffer; //escribe client
     c->write_b = ATTACHMENT(key)->read_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->origin.copy;
     
-    
     c = &ATTACHMENT(key)->origin.copy;
     
     c->fd = &ATTACHMENT(key)->origin_fd;
-    c->read_b = ATTACHMENT(key)->read_buffer;
+    c->read_b = ATTACHMENT(key)->read_buffer; //aca escribe origin
     c->write_b = ATTACHMENT(key)->write_buffer;
     c->duplex = OP_READ | OP_WRITE;
     c->other = &ATTACHMENT(key)->client.copy;
@@ -832,10 +831,6 @@ static unsigned copy_r(struct selector_key *key){
 
     uint8_t *ptr = buffer_write_ptr(b,&size);
     n = recv(key->fd,ptr,size,0);
-    if(*c->fd == ATTACHMENT(key)->client_fd){
-        // llamarias al parser
-        want_filter(true, key);
-    }
 
     if(n<=0){
         shutdown(*c->fd,SHUT_RD);
@@ -846,8 +841,12 @@ static unsigned copy_r(struct selector_key *key){
         }
 
     }else{
+        log(DEBUG, "COPY R before read buffer ptr %s\n", b->read);
+        log(DEBUG, "COPY R before write buffer ptr %s\n", b->write);
         buffer_write_adv(b,n); 
         log(DEBUG, "COPY READ SENT %zd\n", n);
+        log(DEBUG, "COPY R read buffer ptr %s\n", b->read);
+        log(DEBUG, "COPY R write buffer ptr %s\n", b->write);
         //filter_write(&f->in[W],b);
         //close(f->in[W]);
         //filter_read(&f->out[R],b);
@@ -876,6 +875,9 @@ static unsigned copy_w(struct selector_key *key){
     unsigned ret = COPY; //ESTADO DE RETORNO?
     struct pop3 * proxy = ATTACHMENT(key);
 
+    log(DEBUG, "Before queue copy w READ: %s\n", b->read);
+    log(DEBUG, "Before queue copy w WRITE: %s\n", b->write);
+
     if (*c->fd == proxy->origin_fd) {
         if(queue_is_empty(proxy->commands_queue)){
             bool new_cmd = false;
@@ -886,16 +888,17 @@ static unsigned copy_w(struct selector_key *key){
         }
         // buffer_read_ptr(b, &size);
         // buffer_read_adv(b, size);
-        buffer_reset(b);
-        uint8_t *  ptr_copy = buffer_write_ptr(b, &size);
+        // buffer_reset(b);
+        // uint8_t *  ptr_copy = buffer_write_ptr(proxy->origin.copy.write_b, &size);
         command_info = dequeue(proxy->commands_queue);
-        memcpy(ptr_copy, command_info->cmd, command_info->cmd_size);
-        buffer_write_adv(b, command_info->cmd_size);
+        // memcpy(ptr_copy, command_info->cmd, command_info->cmd_size);
+        // buffer_write_adv(b, command_info->cmd_size);
         log(DEBUG, "First command sent %s\n", command_info->cmd);
         log(DEBUG, "Command type %d\n", command_info->type);
         bool filter = command_info->type == CMD_RETR || command_info->type == CMD_TOP;
         want_filter(filter, key);
         n = send(key->fd, command_info->cmd, command_info->cmd_size, MSG_NOSIGNAL);
+        log(DEBUG, "command size copy write %zu\n", command_info->cmd_size);
         cmd_destroy(command_info);
     }
     else {
@@ -911,23 +914,14 @@ static unsigned copy_w(struct selector_key *key){
             c->other->duplex &= -OP_READ;
         }
     } else {
+        log(DEBUG, "COPY W read buffer ptr %s\n", b->read);
+        log(DEBUG, "COPY W write buffer ptr %s\n", b->write);
+        log(DEBUG, "COPY W N %zd\n", n);
         buffer_read_adv(b,n);
     }
 
-    // if(!queue_is_empty(proxy->commands_queue) && pipelining == 1){
-    //     log(DEBUG, "QUEUE SIZE %d\n", queue_size(proxy->commands_queue));
-    //     pipelining = 1;
-    //     uint8_t *  ptr_copy = buffer_write_ptr(b, &size);
-    //     command_info = dequeue(proxy->commands_queue);
-    //     memcpy(ptr_copy, command_info->cmd, command_info->cmd_size);
-    //     buffer_write_adv(b, command_info->cmd_size);
-    //     // bool filter = command_info->type == CMD_RETR || command_info->type == CMD_TOP;
-    //     // want_filter(filter, key);
-    // }
-    // else pipelining = 0;
-
-    copy_interest(key->s,&proxy->client.copy);
-    copy_interest(key->s,&proxy->origin.copy);
+    copy_interest(key->s,c);
+    copy_interest(key->s,c->other);
 
     if(c->duplex == OP_NOOP){ //SE CERRARON LOS DOS
         ret = DONE;

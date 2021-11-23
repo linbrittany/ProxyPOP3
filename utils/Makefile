@@ -8,7 +8,7 @@ all:$(SOURCES)
 	@$(CC) $(CFLAGS) $(SOURCES)
 
 %.o : %.c
-	@$(CC) $(CFLAGS) $< -o $@
+	$(CC) $(CFLAGS) $< -o $@
 
 clean:
 	@$(rm) $(OBJECTS)

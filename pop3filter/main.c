@@ -19,8 +19,8 @@
 
 extern struct proxy_args args;
 
-static address_info proxy_addr;
-static address_info admin_proxy_addr;
+extern address_info proxy_addr;
+extern address_info admin_proxy_addr;
 static address_info origin_addr_data;
 
 //Sockets tienen que ser gloabales

@@ -23,5 +23,8 @@ typedef struct address_info {
     in_port_t port;
 } address_info;
 
+address_info proxy_addr;
+address_info admin_proxy_addr;
+
 void set_address(address_info * address, const char * ip);
 #endif
