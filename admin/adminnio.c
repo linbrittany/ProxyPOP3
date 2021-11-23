@@ -43,7 +43,6 @@ command_action commands[COMMANDS_QTY] = {
     {.command = "get_filter"    , .args_qty = 0, .func = &get_buffer_size},
     {.command = "set_filter"    , .args_qty = 1, .func = &get_buffer_size},
 };
-// 
 
 void admin_passive_accept(struct selector_key *key) {
     char buffer[BUFFER_MAX_SIZE] = {0};
@@ -58,7 +57,7 @@ void admin_passive_accept(struct selector_key *key) {
 
     char to_ret[BUFFER_MAX_SIZE] = {0};
     parse(buffer, to_ret);
-
+	sendto(key->fd, to_ret, strlen(to_ret), 0, (const struct sockaddr *) &clntAddr, len);
     return;
 }
 
@@ -78,6 +77,7 @@ int parse (char *buffer, char to_ret []) {
     }
 
     token = strtok(NULL, s);
+    printf("token %s\n", token);
     if (token == NULL) {
         sprintf(to_ret, "Please enter command\n");
         return -1;
@@ -91,7 +91,7 @@ int parse (char *buffer, char to_ret []) {
     }
 
     if (command_index == -1) {
-        sprintf(to_ret, "Please enter command\n");
+        sprintf(to_ret, "Please enter valid command\n");
         return command_index;
     }
 
