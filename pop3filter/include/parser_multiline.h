@@ -20,6 +20,6 @@ enum filter_states {
 };
 
 
-int parse_headers(struct copy * c, int state);
+int parse_headers(struct copy * c);
 
 #endif
