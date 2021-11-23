@@ -16,6 +16,7 @@
 #include "pop3nio.h"
 #include "buffer.h"
 #include "netutils.h"
+#include "parser_multiline.h"
 
 /*parsers*/
 #include "hello_parser.h"
@@ -83,6 +84,8 @@ struct pop3 {
     struct buffer * read_buffer;
     struct buffer * write_buffer;
 
+    struct buffer * headers;
+
     /* Persisto si origen soporta una lista de capabilities de POP3 */
     capabilities origin_capabilities;
 
@@ -110,10 +113,10 @@ struct pop3 {
      union{
 
         struct copy copy;
-
+        int filter_state_in;
      }filter_in;
       union{
-        
+        int filter_state_out;
         struct copy copy;
 
      }filter_out;
@@ -288,6 +291,7 @@ static struct pop3 * pop3_new(int client_fd, size_t buffer_size, address_info or
         buffer_reset(write_buff);
     }
 
+    
     memset(to_ret, 0, sizeof(sizeof(struct pop3)));
 
     to_ret->client_fd = client_fd;
@@ -735,6 +739,8 @@ static void copy_init(const unsigned state, struct selector_key *key){
     c->other = &ATTACHMENT(key)->filter_in.copy;
 
     filter_init(key); // chequear si esto va aca
+    ATTACHMENT(key)->filter_in.filter_state_in = 0;
+    ATTACHMENT(key)->filter_out.filter_state_out = 0;
 
     c = &ATTACHMENT(key)->filter_in.copy;
     
@@ -940,7 +946,8 @@ static const struct fd_handler filter_handler = {
 
 
 static void filter_init(struct selector_key *key){
- 
+
+    ATTACHMENT(key)->headers = buffer_init(MAX_BUFF);
     struct filter *f = &ATTACHMENT(key) -> filter_data;
     //f->fd = &ATTACHMENT(key) -> origin_fd;
 
@@ -1003,79 +1010,6 @@ static void filter_init(struct selector_key *key){
 
 }
 
-/*
-int fd_select(int fd[2], int n){
-    for(int i = 0; i<2; i++){
-        if(fd[i] > n){
-            n = fd[i];
-        }
-        
-    }
-    return n;
-}//  la funcion select te pide el fd mas grande
-*/
-
-/*
- void filter_interest(fd_selector s, struct filter *f, buffer * buff_in, buffer * buff_out){
-    
-       enum{
-        R=0,
-        W=1
-    };
-    //int nfds = fd_select(f->in,0);
-    //nfds = fd_select(f->out,nfds);
-    f->duplex[0] = OP_NOOP;
-    f->duplex[1] = OP_NOOP;
-    //f->buff_in = buffer_init(MAX_BUFF);
-    //f->buff_out = buffer_init(MAX_BUFF);
-    fd_set readfd, writefd;
-    FD_ZERO(&readfd); 
-    FD_ZERO(&writefd);
-   printf("Primero");
-   //Hasta aca funciona
-    if(f->in[R]!=-1&& buffer_can_write(buff_in)){
-        //FD_SET(f->in[R],&readfd); 
-        f->duplex[0] |= OP_READ; //me subscribo si tengo lugar en el buffer 
-    }
-       printf("   2");
-    if(f->out[R]!=-1&& buffer_can_write(buff_out)){
-        //FD_SET(f->out[R],&readfd); 
-         f->duplex[1] |= OP_READ; //me subscribo si tengo lugar en el buffer 
-    }
-     printf("   3");
-    if(f->out[W]!=-1&& buffer_can_read(buff_in)){
-        //FD_SET(f->out[W],&writefd); 
-         f->duplex[1] |= OP_WRITE; //me subscribo si tengo lugar en el buffer 
-    }
-    printf("   4");
-    if(f->in[W]!=-1&& buffer_can_read(buff_out)){
-        //FD_SET(f->in[R],&writefd); 
-        f->duplex[0] |= OP_WRITE; //me subscribo si tengo lugar en el buffer 
-    }
-    printf("   5");
-    
-    
-      if(SELECTOR_SUCCESS != selector_set_interest(s,f->in[W],f->duplex[W])){ //Escribir cat
-        abort(); //TODO mensaje de error?
-    }
-    printf("   6");
-      if(SELECTOR_SUCCESS != selector_set_interest(s,f->out[R],f->duplex[R])){ //Leer
-        abort(); //TODO mensaje de error?
-    }
-    
-    printf("   7");
-    if(-1==f->in[R] && -1!=f->out[W] && !buffer_can_read(buff_in)){
-        close(f->out[W]);
-        f->out[W] = -1;
-    }
-    printf("   8");
-    if(-1 == f->out[R] && -1 != f->in[W] && !buffer_can_read(buff_out)){
-        close(f->in[W]);
-        f->in[W] = -1;
-    }
-    printf("LLEGUE AL FINAL");
-}
-*/
 
 static void filter_read(struct selector_key *key){
     struct copy *c = copy_ptr(key);
@@ -1084,10 +1018,22 @@ static void filter_read(struct selector_key *key){
     buffer *b = c->read_b;
     //unsigned ret = COPY; 
     uint8_t *ptr;
+    uint8_t *header_ptr;
     ssize_t n;
     size_t count = 0;
+    size_t count_h = 0;
+
+    
     ptr = buffer_write_ptr(b,&count);
+    header_ptr = buffer_read_ptr(ATTACHMENT(key)->headers,&count_h);
+    strcpy((char *) ptr, (char *) header_ptr);
+    buffer_read_adv(ATTACHMENT(key)->headers,count_h);
+    buffer_write_adv(b,(ssize_t) count_h);
+    ptr = buffer_write_ptr(b,&count);
+
     n = read(f->out[R],ptr,count);
+    
+    
 
   
     if(n==0 || n== -1){
@@ -1116,13 +1062,21 @@ static void filter_write(struct selector_key *key){
     struct copy *c = copy_ptr(key); 
     assert(*c->fd == key->fd);
     uint8_t *ptr;
+    uint8_t *header_ptr;
     ssize_t n;
     size_t count = 0;
+    size_t count_h = 0;
     buffer *b = c->write_b;
     //unsigned ret = COPY; //ESTADO DE RETORNO?
-
+    int index = parse_headers(c);
 
     ptr = buffer_read_ptr(b,&count);
+    header_ptr = buffer_write_ptr(ATTACHMENT(key)->headers,&count_h);
+    strncpy((char *)header_ptr,(char *)ptr,index);
+    buffer_write_adv(ATTACHMENT(key)->headers,index);
+    buffer_read_adv(b,index);
+    ptr = buffer_read_ptr(b,&count);
+
     n = write(*c->fd,ptr,count);
     if(n== -1){
         shutdown(*c->fd,SHUT_WR);

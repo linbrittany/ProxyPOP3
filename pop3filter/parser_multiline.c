@@ -9,10 +9,11 @@
 
 #include "parser_multiline.h"
 #define ATTACHMENT(key) ((struct pop3 *)(key)->data)
+int state = 0;
 
 //Dado el mensaje, devuelve el indice donde terminan los headers, y transforma los puntos.
-int parse_headers(struct copy * c, int state){
-    buffer * b = c->read_b;
+int parse_headers(struct copy * c){
+    buffer * b = c->write_b;
     int index = 0;
     size_t count = 0;
     char * read = (char *) buffer_read_ptr(b, &count);
@@ -22,21 +23,26 @@ int parse_headers(struct copy * c, int state){
 
         switch(state){
             case HEADER:
+                index = i;
                 if(read[i] == '\r') state = HEADER_CR_1;
                 else state = HEADER;
+                
                 break;
             case HEADER_CR_1:
-                if(read[i] == '\n') state = CR;
+                index = i;
+                if(read[i] == '\n') state = HEADER_N;
                 else state = HEADER;
+                
                 break;
             case HEADER_N:
-                if(read[i] == '\r') state = HEADER_N;
+                index = i;
+                if(read[i] == '\r') state = HEADER_CR_2;
                 else state = HEADER;
                 break;
             case HEADER_CR_2:
-                if(read[i] == '\r') {
-                    index = i;
-                    state = CR;
+                index = i;
+                if(read[i] == '\n') {    
+                    state = NEW_LINE;
                 }else
                 state = HEADER;
                 break;
@@ -81,6 +87,7 @@ int parse_headers(struct copy * c, int state){
 
     
     }
+    
 
     return index;
 
