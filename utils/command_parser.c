@@ -186,6 +186,7 @@ extern cmd_state cmd_comsume(buffer *b, struct Queue * queue, struct cmd_parser 
     cmd_state st = p->state;
     while(buffer_can_parse(b)) {
         const uint8_t c = buffer_parse(b);
+        log(DEBUG,"Char en parser: %c\n",c);
         st = cmd_parser_feed(p, queue, c, new_cmd);
     }
     buffer_parse_reset(b);
@@ -225,7 +226,6 @@ void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, struct Que
 
     current_cmd->is_multiline = is_multiline(current_cmd, p->arg_qty);
     memcpy(cmd_copy, current_cmd, sizeof(struct st_command));
-    
     enqueue(queue,cmd_copy);
     *new_cmd = true;
     p->state = CMD_TYPE;

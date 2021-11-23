@@ -856,7 +856,7 @@ static unsigned copy_w(struct selector_key *key){
         log(DEBUG, "Command type %d\n", command_info->type);
         bool filter = command_info->type == CMD_RETR || command_info->type == CMD_TOP;
         want_filter(filter, key);
-        n = send(key->fd, command_info->cmd, command_info->cmd_size, MSG_NOSIGNAL);
+        n = send(key->fd, ptr_copy, command_info->cmd_size, MSG_NOSIGNAL);
         cmd_destroy(command_info);
     }
     else {
@@ -966,14 +966,14 @@ static void filter_init(struct selector_key *key){
 
         set_variables(ATTACHMENT(key));   //setear variables de entorno
         
-       if(-1 == execl("/bin/sh", "sh", "-c", args.command, (char *) 0)){
-           //escribir sin transformar los mensajes
-           perror("executing command");
-           close(f->in[R]);
-           close(f->out[W]);
-           f->in[R] = -1;
-           f->out[W] = -1;
-       }
+    //    if(-1 == execl("/bin/sh", "sh", "-c", args.command, (char *) 0)){
+    //        //escribir sin transformar los mensajes
+    //        perror("executing command");
+    //        close(f->in[R]);
+    //        close(f->out[W]);
+    //        f->in[R] = -1;
+    //        f->out[W] = -1;
+    //    }
        
     } else {
         close(f->in[R]);
