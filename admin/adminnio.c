@@ -12,6 +12,7 @@
 #define COMMANDS_QTY 9
 
 extern struct proxy_args args;
+extern struct proxy_metrics metrics;
 
 int parse( char *buffer, char to_ret []);
 
@@ -23,8 +24,8 @@ typedef enum status_code{
 } status_code;
 
 typedef union {
-    void (*getter) (char buffer[]);
-    status_code (*setter) (char *arg,char buffer[]);
+    void (*getter) (char *);
+    status_code (*setter) (char *,char *);
 }func;
 
 typedef struct command_action {
@@ -33,11 +34,12 @@ typedef struct command_action {
     func function;
 } command_action;
 
-void get_buffer_size(char buffer []);
-status_code set_buffer_size(char * arg, char buffer []);
+void get_buffer_size(char *to_ret);
+status_code set_buffer_size(char * arg, char *to_ret);
+void get_stats(char *to_ret);
 
 command_action commands[COMMANDS_QTY] = {
-    {.command = "stats"         , .args_qty = 0, .function = {.getter = &get_buffer_size}},
+    {.command = "stats"         , .args_qty = 0, .function = {.getter = &get_stats}      },
     {.command = "get_buff_size" , .args_qty = 0, .function = {.getter = &get_buffer_size}},
     {.command = "set_buff_size" , .args_qty = 1, .function = {.setter = &set_buffer_size}},
     {.command = "get_timeout"   , .args_qty = 0, .function = {.getter = &get_buffer_size}},
@@ -63,14 +65,13 @@ void admin_passive_accept(struct selector_key *key) {
     int cmd = 0 ;
     cmd = parse(buffer, to_ret);
     if (cmd >= 0) {
-        if (commands[cmd].function.setter != NULL) {
+        if (commands[cmd].args_qty > 0) {
             commands[cmd].function.setter(buffer,to_ret);
         } else {
             commands[cmd].function.getter(to_ret);
         }
     }
 
-    log(DEBUG,"%lu",strlen(to_ret));
     sendto(key->fd, to_ret, strlen(to_ret), 0, (const struct sockaddr *) &clntAddr, len);
 
     return;
@@ -97,7 +98,6 @@ int parse( char *buffer, char to_ret []) {
     char *credToken = args.admin_credential;
 
     // indicator = adv(buffer);
-    log(INFO,"%s",buffer);
     if (strcmp_custom(credToken, buffer) != 0 ) {
         sprintf(to_ret, "Please enter valid token\n");
         return -1;
@@ -111,7 +111,7 @@ int parse( char *buffer, char to_ret []) {
     }
 
     for (int i = 0 ; i < COMMANDS_QTY ; i++) {
-        if (strcmp(commands[i].command, buffer+indicator) == 0 ) {
+        if (strcmp_custom(commands[i].command, buffer+indicator) == 0 ) {
             command_index = i;
             break;
         }
@@ -135,10 +135,10 @@ int parse( char *buffer, char to_ret []) {
     return command_index;
 }
 
-status_code set_buffer_size(char * arg, char buffer []) {
+status_code set_buffer_size(char * arg, char to_ret[]) {
     const char s[2] = " ";
     char *token;
-    token = strtok(buffer,s);
+    token = strtok(arg,s);
     token = strtok(NULL, s);
     token = strtok(NULL, s);
 
@@ -147,14 +147,17 @@ status_code set_buffer_size(char * arg, char buffer []) {
         return INVALID_ARGUMENT;
     }
     args.buffer_size = new_size;
-    sprintf(buffer,"New buffer size set to: %d", new_size);
+    sprintf(to_ret,"New buffer size set to: %d\n", new_size);
     return OK_RESPONSE;
 }
 
 
-void get_buffer_size(char buffer []) {
-    log(DEBUG,"BUENAS FUNCIONA :%s",buffer);
-    sprintf(buffer, "Buffer size value: %zu", args.buffer_size);
+void get_buffer_size(char *to_ret) {
+    sprintf(to_ret, "Buffer size value: %zu\n", args.buffer_size);
+}
+
+void get_stats(char *to_ret) {
+    sprintf(to_ret,"Active Connections: %lu\nTotal Bytes Transfered: %lu\nTotal Connnections: %lu\n", metrics.active_connections, metrics.bytes_transferred, metrics.total_connections);
 }
 
 // status_code set_timeout(char *arg, char buffer[]) {
