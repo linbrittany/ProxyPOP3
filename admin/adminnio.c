@@ -62,17 +62,19 @@ void admin_passive_accept(struct selector_key *key) {
     char to_ret[BUFFER_MAX_SIZE] = {0};
     int cmd = 0 ;
     cmd = parse(buffer, to_ret);
-    if (cmd < 0) return;
-    if (commands[cmd].function.setter!= NULL) {
-        commands[cmd].function.setter(buffer,to_ret);
-    } else {
-        commands[cmd].function.getter(buffer);
+    if (cmd >= 0) {
+        if (commands[cmd].function.setter != NULL) {
+            commands[cmd].function.setter(buffer,to_ret);
+        } else {
+            commands[cmd].function.getter(buffer);
+        }
     }
+
+    sendto(key->fd, to_ret, strlen(to_ret), 0, (const struct sockaddr *) &clntAddr, len);
 
     return;
 }
 
-// pushea gasti
 int parse (char *buffer, char to_ret []) { 
     const char s[2] = " ";
     char *token;
@@ -110,7 +112,7 @@ int parse (char *buffer, char to_ret []) {
     while (token != NULL) {
         token_count++;
         if (token_count > commands[command_index].args_qty) {
-            sprintf(to_ret,"INVALID ARGS");
+            sprintf(to_ret, "INVALID ARGS");
             return -1;
         }
         token = strtok(NULL, s);

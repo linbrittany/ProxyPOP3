@@ -869,6 +869,7 @@ static unsigned copy_w(struct selector_key *key){
     buffer *b = c->write_b;
     unsigned ret = COPY; //ESTADO DE RETORNO?
     struct pop3 * proxy = ATTACHMENT(key);
+
     if (*c->fd == proxy->origin_fd) {
         bool new_cmd = false;
         struct cmd_parser * parser = &proxy->command_parser;
@@ -881,7 +882,7 @@ static unsigned copy_w(struct selector_key *key){
     uint8_t *  ptr = buffer_read_ptr(b,&size);
 
     n = send(key->fd,ptr,size,MSG_NOSIGNAL);
-    if(n==-1){
+    if (n == -1) {
         shutdown(*c->fd,SHUT_WR);
         c->duplex &= -OP_WRITE;
         if(*c->other->fd!=-1){
