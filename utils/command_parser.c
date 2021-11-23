@@ -21,6 +21,9 @@ struct command_info {
     size_t min_args; //si argumento fijo, min-args = max_args
 };
 
+struct st_command * temporal_cmd_info;
+
+
 static const struct command_info user_commands[] = {
     {
         .type = CMD_USER, .command = "USER", .len = 4, .max_args = 1, .min_args = 1 //TODO: analizar la posibilidad de que el username tenga espacios
@@ -184,12 +187,17 @@ extern cmd_state cmd_parser_feed(struct cmd_parser * parser, struct Queue *queue
 
 extern cmd_state cmd_comsume(buffer *b, struct Queue * queue, struct cmd_parser *p, bool * new_cmd) {
     cmd_state st = p->state;
+    log(DEBUG, "BUFF WRITE %s\n", b->write);
+    log(DEBUG, "SIZE RESTA: %ld\n", b->write - b->parsed);
+    
     while(buffer_can_parse(b)) {
         const uint8_t c = buffer_parse(b);
+        log(DEBUG, "PARSED en while %s\n", b->parsed);
         log(DEBUG,"Char en parser: %c\n",c);
         st = cmd_parser_feed(p, queue, c, new_cmd);
     }
     buffer_parse_reset(b);
+    log(DEBUG, "SIZE RESTA: %ld\n", b->write - b->parsed);
     return st;
 }
 
@@ -208,7 +216,9 @@ static bool is_multiline(struct st_command *command, size_t arg_qty) {
 }
 
 void cmd_destroy(struct st_command *command){
-    free(command->arg);
+    if (command->arg != NULL) {
+            free(command->arg);
+        }
     free(command->cmd);
 }
 
@@ -218,10 +228,10 @@ void handle_cmd(struct cmd_parser *p, struct st_command *current_cmd, struct Que
     cmd_copy->cmd = malloc(current_cmd->cmd_size);
     if (p->state == CMD_ERROR) {
         current_cmd->type = CMD_OTHER;
-        if (current_cmd->arg != NULL) {
-            free(current_cmd->arg);
-            current_cmd->arg = NULL;
-        }
+        // if (current_cmd->arg != NULL) {
+        //     free(current_cmd->arg);
+        //     current_cmd->arg = NULL;
+        // }
     }
 
     current_cmd->is_multiline = is_multiline(current_cmd, p->arg_qty);

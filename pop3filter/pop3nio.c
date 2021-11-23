@@ -551,7 +551,7 @@ static unsigned connection_done(struct selector_key * key) {
         }
         return ERROR;
     }
-    else  if (SELECTOR_SUCCESS == selector_set_interest(key->s, proxy_pop3->client_fd, OP_READ)) { //Setear origin para leer
+    else  if (SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) { //Setear origin para leer
         log(INFO, "Connection established for client %d and origin %d\n", proxy_pop3->client_fd, key->fd);
         return HELLO;
     }
@@ -850,7 +850,10 @@ static unsigned copy_r(struct selector_key *key){
         }
 
     }else{
-        buffer_write_adv(b,n); 
+        buffer_write_adv(b,n);
+        log(DEBUG, "LEI N = %ld bytes",n);
+        log(DEBUG, "Buff write = %s",b->write);
+
         //filter_write(&f->in[W],b);
         //close(f->in[W]);
         //filter_read(&f->out[R],b);
@@ -874,21 +877,36 @@ static unsigned copy_w(struct selector_key *key){
     size_t size;
     ssize_t n;
     buffer *b = c->write_b;
+    struct st_command * command_info;
     unsigned ret = COPY; //ESTADO DE RETORNO?
     struct pop3 * proxy = ATTACHMENT(key);
 
     if (*c->fd == proxy->origin_fd) {
-        bool new_cmd = false;
-        struct cmd_parser * parser = &proxy->command_parser;
-        cmd_comsume(b, proxy->commands_queue, parser, &new_cmd);
-        bool filter = parser->current_cmd.type == CMD_RETR || parser->current_cmd.type == CMD_TOP;
-        log(INFO, "Command type %d\n", parser->current_cmd.type);
-        want_filter(filter, key);
+        if(queue_is_empty(proxy->commands_queue)){
+            bool new_cmd = false;
+            struct cmd_parser * parser = &proxy->command_parser;
+            cmd_comsume(b, proxy->commands_queue, parser, &new_cmd);
+            log(DEBUG, "QUEUE SIZE %d\n", queue_size(proxy->commands_queue));
+        }
+        log(DEBUG, "STATE  %d\n",proxy->command_parser.state );
+        if(proxy->command_parser.state != CMD_ERROR){
+            buffer_read_ptr(b, &size);
+            buffer_read_adv(b, size);
+            command_info = dequeue(proxy->commands_queue);
+            buffer_write_adv(b, command_info->cmd_size);
+            log(DEBUG, "First command sent %s SIZE: %ld\n", command_info->cmd, command_info->cmd_size);
+            log(DEBUG, "Command type %d\n", command_info->type);
+            bool filter = command_info->type == CMD_RETR || command_info->type == CMD_TOP;
+            want_filter(filter, key);
+            n = send(key->fd, command_info->cmd, command_info->cmd_size, MSG_NOSIGNAL);
+        // cmd_destroy(command_info);
+        }
+    }
+    else {
+        uint8_t *  ptr = buffer_read_ptr(b, &size);
+        n = send(key->fd, ptr, size, MSG_NOSIGNAL);
     }
 
-    uint8_t *  ptr = buffer_read_ptr(b,&size);
-
-    n = send(key->fd,ptr,size,MSG_NOSIGNAL);
     if (n == -1) {
         shutdown(*c->fd,SHUT_WR);
         c->duplex &= -OP_WRITE;
